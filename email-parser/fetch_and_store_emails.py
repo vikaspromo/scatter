@@ -255,25 +255,76 @@ def store_email_in_database(email_data, attachments_data):
     return email_id
 
 
-def fetch_and_store_emails(max_results=3):
-    """Fetch emails from Gmail and store in Supabase."""
+def get_most_recent_email_date():
+    """Get the most recent email created_at timestamp from the database."""
+    try:
+        result = supabase.table('emails').select('created_at').order('created_at', desc=True).limit(1).execute()
+
+        if result.data and len(result.data) > 0:
+            created_at = result.data[0]['created_at']
+            # Parse the timestamp and format it for Gmail API (YYYY/MM/DD)
+            from dateutil import parser
+            date_obj = parser.parse(created_at)
+            gmail_date_format = date_obj.strftime('%Y/%m/%d')
+            print(f"Most recent email in database: {created_at}")
+            print(f"Fetching emails after: {gmail_date_format}\n")
+            return gmail_date_format
+        else:
+            print("No emails found in database, fetching all emails\n")
+            return None
+    except Exception as e:
+        print(f"Error querying database: {e}")
+        print("Fetching all emails as fallback\n")
+        return None
+
+
+def fetch_and_store_emails():
+    """Fetch all emails from Gmail and store in Supabase."""
     creds = get_credentials()
     service = build('gmail', 'v1', credentials=creds)
 
-    # Use Gmail query to filter for emails from vikassood@gmail.com
-    results = service.users().messages().list(
-        userId='me',
-        q='from:vikassood@gmail.com',
-        maxResults=max_results
-    ).execute()
+    # Get the most recent email date from database
+    most_recent_date = get_most_recent_email_date()
 
-    messages = results.get('messages', [])
+    # Build Gmail query to filter for emails from vikassood@gmail.com
+    # and after the most recent email in the database
+    query = 'from:vikassood@gmail.com'
+    if most_recent_date:
+        query += f' after:{most_recent_date}'
+
+    print(f"Gmail query: {query}\n")
+
+    # Fetch all emails using pagination
+    messages = []
+    page_token = None
+
+    while True:
+        # Use Gmail query to filter for emails
+        if page_token:
+            results = service.users().messages().list(
+                userId='me',
+                q=query,
+                pageToken=page_token
+            ).execute()
+        else:
+            results = service.users().messages().list(
+                userId='me',
+                q=query
+            ).execute()
+
+        messages.extend(results.get('messages', []))
+        page_token = results.get('nextPageToken')
+
+        if not page_token:
+            break
+
+        print(f"Fetched {len(messages)} emails so far, continuing...")
 
     if not messages:
-        print('No messages found from vikassood@gmail.com.')
+        print('No new messages found from vikassood@gmail.com.')
         return
 
-    print(f"Found {len(messages)} emails to process\n")
+    print(f"Found {len(messages)} total emails to process\n")
 
     for msg in messages:
         # Get full message details
@@ -336,10 +387,10 @@ def main():
     print("="*60)
     print("GMAIL EMAIL PARSER WITH SUPABASE STORAGE")
     print("="*60)
-    print(f"\nFetching emails from vikassood@gmail.com...\n")
+    print(f"\nFetching all emails from vikassood@gmail.com...\n")
 
     try:
-        fetch_and_store_emails(max_results=3)
+        fetch_and_store_emails()
 
         print("="*60)
         print("COMPLETED SUCCESSFULLY")

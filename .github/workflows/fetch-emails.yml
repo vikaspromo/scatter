@@ -1,0 +1,57 @@
+name: Fetch and Store Emails
+
+on:
+  # Run on manual trigger
+  workflow_dispatch:
+
+  # Run on a schedule (every 6 hours)
+  schedule:
+    - cron: '0 */6 * * *'  # Every 6 hours
+
+  # Run on push to main (optional)
+  push:
+    branches:
+      - main
+    paths:
+      - 'email-parser/**'
+
+jobs:
+  fetch-emails:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          cd email-parser
+          pip install -r requirements.txt
+
+      - name: Fetch and store emails
+        env:
+          # Supabase credentials from GitHub Secrets
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+          # Gmail OAuth credentials from GitHub Secrets
+          GMAIL_CREDENTIALS: ${{ secrets.GMAIL_CREDENTIALS }}
+          GMAIL_TOKEN: ${{ secrets.GMAIL_TOKEN }}
+        run: |
+          cd email-parser
+          python3 fetch_and_store_emails.py
+
+      - name: Upload logs (if failed)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-logs
+          path: |
+            email-parser/*.log
+          retention-days: 7
