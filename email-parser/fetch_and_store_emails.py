@@ -210,13 +210,6 @@ def upload_attachment_to_storage(attachment_data, email_gmail_id):
 def store_email_in_database(email_data, attachments_data):
     """Store email and attachments in Supabase database."""
 
-    # First, check if email already exists
-    existing = supabase.table('emails').select('id').eq('gmail_id', email_data['gmail_id']).execute()
-
-    if existing.data:
-        print(f"Email {email_data['gmail_id']} already exists in database, skipping...")
-        return existing.data[0]['id']
-
     # Convert date string to ISO format for Postgres
     try:
         # Parse the email date (Gmail format)
@@ -353,6 +346,12 @@ def fetch_and_store_emails():
         }
 
         print(f"Processing: {subject}")
+
+        # Check if email already exists to avoid duplicate uploads
+        existing = supabase.table('emails').select('id').eq('gmail_id', email_data['gmail_id']).execute()
+        if existing.data:
+            print(f"  ✓ Email already exists in database, skipping...\n")
+            continue
 
         # Extract and download attachments
         attachments = []
