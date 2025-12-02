@@ -126,22 +126,22 @@ def get_header_value(headers, name):
     return ""
 
 def fetch_recent_emails(max_results=3):
-    """Fetch the most recent emails forwarded by vikassood@gmail.com."""
+    """Fetch the most recent emails forwarded by sharewithscatter@gmail.com."""
     creds = get_credentials()
     service = build('gmail', 'v1', credentials=creds)
 
-    # Use Gmail query to filter for emails from vikassood@gmail.com
+    # Use Gmail query to filter for emails from sharewithscatter@gmail.com
     # This is much more efficient than fetching and filtering manually
     results = service.users().messages().list(
         userId='me',
-        q='from:vikassood@gmail.com',
+        q='from:sharewithscatter@gmail.com',
         maxResults=max_results
     ).execute()
 
     messages = results.get('messages', [])
 
     if not messages:
-        print('No messages found from vikassood@gmail.com.')
+        print('No messages found from sharewithscatter@gmail.com.')
         return []
 
     emails = []
@@ -180,7 +180,7 @@ def fetch_recent_emails(max_results=3):
 
 def main():
     """Main function to fetch and print emails."""
-    print("Fetching 3 most recent emails forwarded by vikassood@gmail.com...\n")
+    print("Fetching 3 most recent emails forwarded by sharewithscatter@gmail.com...\n")
 
     try:
         emails = fetch_recent_emails(max_results=3)

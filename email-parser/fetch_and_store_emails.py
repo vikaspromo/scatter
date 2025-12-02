@@ -1,19 +1,27 @@
 #!/usr/bin/env python3
 """
 Fetch emails from Gmail with attachments and store in Supabase.
-Stores email data in database and attachments in Supabase Storage.
+Privacy check happens BEFORE storing - only emails that pass are stored with body.
 """
 
 import os
+import sys
 import json
 import base64
-import tempfile
+import re
 from datetime import datetime
+from pathlib import Path
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from supabase import create_client, Client
+import anthropic
+from dotenv import load_dotenv
+
+# Load .env file from project root
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 # Allow OAuth over HTTP for localhost (required for development)
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
@@ -24,13 +32,22 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 # Supabase configuration
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY')
 STORAGE_BUCKET = 'email-attachments'
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise Exception("SUPABASE_URL and SUPABASE_KEY environment variables must be set")
 
-# Initialize Supabase client
+if not ANTHROPIC_API_KEY:
+    raise Exception("ANTHROPIC_API_KEY environment variable must be set")
+
+# Initialize clients
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+# Load prompt template
+PROMPT_PATH = Path(__file__).parent.parent / 'ai-processor' / 'prompts' / 'parse_email.txt'
+PROMPT_TEMPLATE = PROMPT_PATH.read_text()
 
 
 def get_credentials():
@@ -203,22 +220,66 @@ def upload_attachment_to_storage(attachment_data, email_gmail_id):
         return storage_path, storage_url
 
     except Exception as e:
+        # Handle duplicate attachment (already uploaded)
+        if 'Duplicate' in str(e) or '409' in str(e):
+            print(f"  Attachment already exists, using existing: {filename}")
+            storage_url = supabase.storage.from_(STORAGE_BUCKET).get_public_url(storage_path)
+            return storage_path, storage_url
         print(f"Error uploading attachment {filename}: {e}")
         raise
+
+
+def extract_original_date_from_body(body: str):
+    """Extract the original email date from a forwarded email body."""
+    import re
+    from dateutil import parser as date_parser
+
+    if not body:
+        return None
+
+    # Common patterns for forwarded email date headers
+    patterns = [
+        # "Date: Mon, Oct 14, 2025 at 6:00 PM"
+        r'Date:\s*([A-Za-z]{3},\s+[A-Za-z]{3}\s+\d{1,2},\s+\d{4}\s+at\s+\d{1,2}:\d{2}\s*[AP]M)',
+        # "Date: Mon, 14 Oct 2025 18:00:00"
+        r'Date:\s*([A-Za-z]{3},\s+\d{1,2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{1,2}:\d{2}:\d{2})',
+        # "Date: October 14, 2025 at 6:00 PM"
+        r'Date:\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}\s+at\s+\d{1,2}:\d{2}\s*[AP]M)',
+        # "---------- Forwarded message ---------\nFrom: ...\nDate: ..."
+        r'-+\s*Forwarded message\s*-+.*?Date:\s*([^\n<]+)',
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, body, re.IGNORECASE | re.DOTALL)
+        if match:
+            date_str = match.group(1).strip()
+            try:
+                parsed_date = date_parser.parse(date_str, fuzzy=True)
+                return parsed_date.isoformat()
+            except Exception:
+                continue
+
+    return None
 
 
 def store_email_in_database(email_data, attachments_data):
     """Store email and attachments in Supabase database."""
 
-    # Convert date string to ISO format for Postgres
-    try:
-        # Parse the email date (Gmail format)
-        from email.utils import parsedate_to_datetime
-        date_obj = parsedate_to_datetime(email_data['date'])
-        email_data['date'] = date_obj.isoformat()
-    except Exception as e:
-        print(f"Warning: Could not parse date '{email_data['date']}': {e}")
-        email_data['date'] = None
+    # Try to extract original date from forwarded email body first
+    original_date = extract_original_date_from_body(email_data.get('body', ''))
+
+    if original_date:
+        email_data['date'] = original_date
+        print(f"  ✓ Extracted original date: {original_date}")
+    else:
+        # Fall back to the header date
+        try:
+            from email.utils import parsedate_to_datetime
+            date_obj = parsedate_to_datetime(email_data['date'])
+            email_data['date'] = date_obj.isoformat()
+        except Exception as e:
+            print(f"Warning: Could not parse date '{email_data['date']}': {e}")
+            email_data['date'] = None
 
     # Insert email into database
     email_result = supabase.table('emails').insert({
@@ -248,20 +309,20 @@ def store_email_in_database(email_data, attachments_data):
     return email_id
 
 
-def get_most_recent_email_date():
-    """Get the most recent email created_at timestamp from the database."""
+def get_most_recent_email_timestamp():
+    """Get the most recent email created_at timestamp from the database as Unix timestamp."""
     try:
         result = supabase.table('emails').select('created_at').order('created_at', desc=True).limit(1).execute()
 
         if result.data and len(result.data) > 0:
             created_at = result.data[0]['created_at']
-            # Parse the timestamp and format it for Gmail API (YYYY/MM/DD)
             from dateutil import parser
             date_obj = parser.parse(created_at)
-            gmail_date_format = date_obj.strftime('%Y/%m/%d')
+            # Gmail API accepts Unix timestamp for after: filter
+            unix_timestamp = int(date_obj.timestamp())
             print(f"Most recent email in database: {created_at}")
-            print(f"Fetching emails after: {gmail_date_format}\n")
-            return gmail_date_format
+            print(f"Fetching emails after timestamp: {unix_timestamp}\n")
+            return unix_timestamp
         else:
             print("No emails found in database, fetching all emails\n")
             return None
@@ -271,19 +332,90 @@ def get_most_recent_email_date():
         return None
 
 
+def parse_email_with_claude(email_data, attachment_names):
+    """Send email to Claude for privacy check and item extraction."""
+    attachment_str = ', '.join(attachment_names) if attachment_names else 'None'
+
+    prompt = PROMPT_TEMPLATE.format(
+        subject=email_data.get('subject', ''),
+        from_address=email_data.get('from', ''),
+        date=email_data.get('date', ''),
+        attachments=attachment_str,
+        body=email_data.get('body', '')
+    )
+
+    message = claude.messages.create(
+        model='claude-sonnet-4-5-20250929',
+        max_tokens=4096,
+        messages=[{'role': 'user', 'content': prompt}]
+    )
+
+    response_text = message.content[0].text
+
+    # Extract JSON from response (handle markdown code blocks)
+    json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
+    if json_match:
+        json_str = json_match.group(1)
+    else:
+        # Try to find raw JSON object
+        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        if json_match:
+            json_str = json_match.group(0)
+        else:
+            json_str = response_text.strip()
+
+    return json.loads(json_str)
+
+
+def save_item(email_id, item):
+    """Save an extracted item to the database and return its ID."""
+    data = {
+        'email_id': email_id,
+        'content': item['content'],
+        'date': item.get('date')
+    }
+
+    response = supabase.table('items').insert(data).execute()
+    return response.data[0]['id']
+
+
+def link_attachments_to_item(item_id, attachment_filenames, all_attachments):
+    """Link attachments to an item based on filename matching."""
+    if not attachment_filenames:
+        return
+
+    for attachment in all_attachments:
+        if attachment['filename'] in attachment_filenames:
+            supabase.table('attachments').update(
+                {'item_id': item_id}
+            ).eq('id', attachment['id']).execute()
+
+
+def store_failed_email(gmail_id):
+    """Store minimal record for emails that fail privacy check."""
+    try:
+        supabase.table('emails').insert({
+            'gmail_id': gmail_id,
+            'privacy_check_passed': False
+        }).execute()
+        print(f"  ✗ Stored failed privacy check record")
+    except Exception as e:
+        # May already exist
+        print(f"  ✗ Could not store failed record: {e}")
+
+
 def fetch_and_store_emails():
-    """Fetch all emails from Gmail and store in Supabase."""
+    """Fetch emails from Gmail, run privacy check, and store only passing emails."""
     creds = get_credentials()
     service = build('gmail', 'v1', credentials=creds)
 
-    # Get the most recent email date from database
-    most_recent_date = get_most_recent_email_date()
+    # Get the most recent email timestamp from database
+    most_recent_timestamp = get_most_recent_email_timestamp()
 
-    # Build Gmail query to filter for emails from vikassood@gmail.com
-    # and after the most recent email in the database
-    query = 'from:vikassood@gmail.com'
-    if most_recent_date:
-        query += f' after:{most_recent_date}'
+    # Build Gmail query - emails from vikassood@gmail.com OR k12.dc.gov domain
+    query = 'from:vikassood@gmail.com OR from:*@k12.dc.gov'
+    if most_recent_timestamp:
+        query += f' after:{most_recent_timestamp}'
 
     print(f"Gmail query: {query}\n")
 
@@ -314,7 +446,7 @@ def fetch_and_store_emails():
         print(f"Fetched {len(messages)} emails so far, continuing...")
 
     if not messages:
-        print('No new messages found from vikassood@gmail.com.')
+        print('No new messages found matching query.')
         return
 
     print(f"Found {len(messages)} total emails to process\n")
@@ -347,18 +479,41 @@ def fetch_and_store_emails():
 
         print(f"Processing: {subject}")
 
-        # Check if email already exists to avoid duplicate uploads
+        # Check if email already exists to avoid duplicate processing
         existing = supabase.table('emails').select('id').eq('gmail_id', email_data['gmail_id']).execute()
         if existing.data:
             print(f"  ✓ Email already exists in database, skipping...\n")
             continue
 
-        # Extract and download attachments
+        # Extract and download attachments (need filenames for Claude prompt)
         attachments = []
         if 'parts' in message['payload']:
             attachments = extract_attachments(service, message['id'], message['payload']['parts'])
 
+        attachment_names = [a['filename'] for a in attachments]
         print(f"  Found {len(attachments)} attachment(s)")
+
+        # Run Claude privacy check BEFORE storing
+        print(f"  Running privacy check...")
+        try:
+            result = parse_email_with_claude(email_data, attachment_names)
+        except json.JSONDecodeError as e:
+            print(f"  ✗ Error parsing Claude response: {e}")
+            continue
+        except Exception as e:
+            print(f"  ✗ Error calling Claude: {e}")
+            continue
+
+        if not result.get('privacy_check_passed'):
+            # Privacy check failed - store minimal record only
+            reason = result.get('reason', 'Unknown')
+            print(f"  ✗ Privacy check failed: {reason}")
+            store_failed_email(email_data['gmail_id'])
+            print()
+            continue
+
+        # Privacy check passed - proceed with full storage
+        print(f"  ✓ Privacy check passed")
 
         # Upload attachments to storage and collect metadata
         attachments_data = []
@@ -375,18 +530,38 @@ def fetch_and_store_emails():
 
             print(f"  ✓ Uploaded: {attachment['filename']}")
 
-        # Store email and attachments in database
-        store_email_in_database(email_data, attachments_data)
+        # Store email and attachments in database (with privacy_check_passed = TRUE)
+        email_id = store_email_in_database(email_data, attachments_data)
 
+        # Update email to mark privacy check as passed
+        supabase.table('emails').update({'privacy_check_passed': True}).eq('id', email_id).execute()
+
+        # Now extract and store items from Claude's response
+        items = result.get('items', [])
+        print(f"  Extracting {len(items)} items...")
+
+        # Get attachment records from DB to link to items
+        attachment_records = supabase.table('attachments').select('id, filename').eq('email_id', email_id).execute().data
+
+        for item in items:
+            item_id = save_item(email_id, item)
+
+            # Link attachments if specified
+            attachment_filenames = item.get('attachment_filenames', [])
+            if attachment_filenames:
+                link_attachments_to_item(item_id, attachment_filenames, attachment_records)
+                print(f"    Linked {len(attachment_filenames)} attachment(s) to item")
+
+        print(f"  ✓ Stored {len(items)} items")
         print()
 
 
 def main():
     """Main function to fetch and store emails."""
     print("="*60)
-    print("GMAIL EMAIL PARSER WITH SUPABASE STORAGE")
+    print("GMAIL EMAIL PARSER WITH INLINE PRIVACY CHECK")
     print("="*60)
-    print(f"\nFetching all emails from vikassood@gmail.com...\n")
+    print(f"\nFetching emails from vikassood@gmail.com OR *@k12.dc.gov...\n")
 
     try:
         fetch_and_store_emails()

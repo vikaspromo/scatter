@@ -1,180 +1,128 @@
-# scatter-email-parser
+# Scatter
 
-Gmail email parser that fetches emails and stores them in Supabase with attachment storage support.
+Email management app for parents at Brent Elementary. Automatically fetches school emails, filters out student-specific content, extracts actionable items, and displays them in a mobile app.
 
-## Features
+## How It Works
 
-- Fetches emails from Gmail using OAuth 2.0
-- Stores email metadata in Supabase database
-- Uploads attachments to Supabase Storage
-- Incremental sync (only fetches new emails)
-- Designed to run in GitHub Actions with secrets
+1. **Fetch** - Gmail API retrieves emails from school senders
+2. **Filter** - Claude AI rejects student-specific emails (privacy check)
+3. **Extract** - Claude extracts individual items/topics from each email
+4. **Display** - Mobile app shows items in an inbox with done/remind actions
 
-## Prerequisites
+## Quick Start (Local Development)
 
-1. **Google Cloud Project** with Gmail API enabled
-2. **Supabase Project** with database tables and storage bucket
-3. **GitHub Repository** with secrets configured
+### Prerequisites
+- Python 3.9+
+- Node.js 18+
+- Supabase account
+- Google Cloud project with Gmail API enabled
+- Anthropic API key
 
-## Setup Instructions
+### 1. Clone and Install
 
-### 1. Set Up Supabase
+```bash
+git clone https://github.com/yourusername/scatter.git
+cd scatter
 
-#### Create Supabase Project
-1. Go to [supabase.com](https://supabase.com) and create a new project
-2. Wait for the project to be provisioned
+# Python dependencies
+pip install -r email-parser/requirements.txt
 
-#### Create Database Tables
-1. In your Supabase dashboard, go to **SQL Editor**
-2. Copy the contents of `email-parser/schema.sql`
-3. Paste and click **Run** to create the tables
+# Mobile app dependencies
+cd mobile-app && npm install
+```
 
-#### Create Storage Bucket
-1. Go to **Storage** in your Supabase dashboard
-2. Click **New bucket**
-3. Name it: `email-attachments`
-4. Set as **Private** bucket
-5. Click **Create bucket**
+### 2. Set Up Environment Variables
 
-#### Get Supabase Credentials
-1. Go to **Settings** → **API**
-2. Copy your **Project URL** (this is your `SUPABASE_URL`)
-3. Copy your **anon/public** key (this is your `SUPABASE_KEY`)
+```bash
+cp .env.example .env
+```
 
-### 2. Set Up Gmail API
+Edit `.env` with your credentials:
+```
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your_anon_key
+ANTHROPIC_API_KEY=sk-ant-...
+```
 
-#### Create Google Cloud Project
+### 3. Set Up Gmail OAuth
+
 1. Go to [Google Cloud Console](https://console.cloud.google.com)
-2. Create a new project or select an existing one
-3. Enable the **Gmail API**:
-   - Go to **APIs & Services** → **Library**
-   - Search for "Gmail API"
-   - Click **Enable**
-
-#### Create OAuth 2.0 Credentials
-1. Go to **APIs & Services** → **Credentials**
-2. Click **Create Credentials** → **OAuth client ID**
-3. If prompted, configure the OAuth consent screen:
-   - User Type: **External**
-   - Add your email as a test user
-   - Scopes: Add `https://www.googleapis.com/auth/gmail.readonly`
-4. Application type: **Desktop app**
-5. Name it (e.g., "Gmail Email Parser")
-6. Click **Create**
-7. Download the credentials JSON file
-
-#### Generate OAuth Token
-Run the parser locally once to generate your token:
+2. Enable Gmail API
+3. Create OAuth 2.0 credentials (Desktop app)
+4. Download `credentials.json` to `email-parser/`
+5. Run the fetch script - it will prompt for OAuth:
 
 ```bash
 cd email-parser
-
-# Set environment variables temporarily (or export them)
-export SUPABASE_URL="your_supabase_url"
-export SUPABASE_KEY="your_supabase_key"
-
-# Place your downloaded credentials.json in this directory
-# Run the script - it will open a browser for OAuth
 python3 fetch_and_store_emails.py
 ```
 
-Follow the browser prompts to authorize. This will create a `token.json` file.
+### 4. Run the Mobile App
 
-### 3. Configure GitHub Secrets
-
-Go to your GitHub repository → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
-
-Add the following secrets:
-
-#### Required Secrets
-
-| Secret Name | Value | How to Get |
-|-------------|-------|------------|
-| `SUPABASE_URL` | Your Supabase project URL | Supabase Dashboard → Settings → API |
-| `SUPABASE_KEY` | Your Supabase anon/public key | Supabase Dashboard → Settings → API |
-| `GMAIL_CREDENTIALS` | Contents of `credentials.json` | Google Cloud Console (see above) |
-| `GMAIL_TOKEN` | Contents of `token.json` | Generated after first local run |
-
-#### How to Add Multi-line JSON Secrets
-
-For `GMAIL_CREDENTIALS` and `GMAIL_TOKEN`:
-1. Open the JSON file in a text editor
-2. Copy the **entire contents** (including the outer `{}` braces)
-3. Paste into the GitHub secret value field
-4. GitHub will handle the multi-line formatting
-
-Example format for `GMAIL_CREDENTIALS`:
-```json
-{"installed":{"client_id":"xxx.apps.googleusercontent.com","project_id":"xxx","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"xxx","redirect_uris":["http://localhost"]}}
-```
-
-Example format for `GMAIL_TOKEN`:
-```json
-{"token": "xxx", "refresh_token": "xxx", "token_uri": "https://oauth2.googleapis.com/token", "client_id": "xxx.apps.googleusercontent.com", "client_secret": "xxx", "scopes": ["https://www.googleapis.com/auth/gmail.readonly"], "expiry": "2024-01-01T00:00:00.000000Z"}
-```
-
-### 4. Test the Setup
-
-#### Local Testing
 ```bash
-cd email-parser
-
-# Set environment variables
-export SUPABASE_URL="your_supabase_url"
-export SUPABASE_KEY="your_supabase_key"
-
-# Run the parser
-python3 fetch_and_store_emails.py
-```
-
-#### Setup Verification
-```bash
-# Verify Supabase setup
-python3 setup_supabase.py
+cd mobile-app
+npx expo start
 ```
 
 ## Project Structure
 
 ```
-scatter-email-parser/
-├── email-parser/
-│   ├── fetch_and_store_emails.py  # Main email parser script
-│   ├── setup_supabase.py          # Supabase setup verification
-│   ├── schema.sql                 # Database schema
-│   └── requirements.txt           # Python dependencies
-├── .env.example                    # Example environment variables
-├── .gitignore                      # Git ignore rules
-└── README.md                       # This file
+scatter/
+├── email-parser/          # Gmail fetching + Claude processing
+│   ├── fetch_and_store_emails.py
+│   ├── credentials.json   # (not in git)
+│   └── token.json         # (not in git)
+├── ai-processor/          # Claude prompts and config
+│   ├── config.py
+│   └── prompts/
+├── mobile-app/            # Expo React Native app
+├── migrations/            # Database migrations
+├── temp/                  # One-time scripts
+└── .env                   # Environment variables (not in git)
 ```
 
-## How It Works
+## GitHub Actions (Optional)
 
-1. **Authentication**: Uses OAuth 2.0 to authenticate with Gmail API
-2. **Fetch Emails**: Queries Gmail for emails from `vikassood@gmail.com`
-3. **Incremental Sync**: Only fetches emails newer than the most recent one in the database
-4. **Store Email Data**: Saves email metadata to Supabase `emails` table
-5. **Upload Attachments**: Uploads attachments to Supabase Storage bucket
-6. **Track Attachments**: Stores attachment metadata in `attachments` table
+To run email fetching on a schedule:
 
-## Security Notes
+### Required Secrets
 
-- Never commit `credentials.json` or `token.json` to git (they're in `.gitignore`)
-- Store all sensitive credentials in GitHub Secrets
-- Supabase storage bucket is private by default
-- Row Level Security is enabled on database tables
+| Secret | Description |
+|--------|-------------|
+| `SUPABASE_URL` | Your Supabase project URL |
+| `SUPABASE_KEY` | Supabase anon/public key |
+| `ANTHROPIC_API_KEY` | Anthropic API key |
+| `GMAIL_CREDENTIALS` | Contents of `credentials.json` |
+| `GMAIL_TOKEN` | Contents of `token.json` |
+
+### Adding Secrets
+
+1. Go to your repo → Settings → Secrets and variables → Actions
+2. Click "New repository secret"
+3. Add each secret (paste JSON contents directly for multi-line values)
+
+## Security
+
+- **Never commit** `.env`, `credentials.json`, or `token.json`
+- Use **anon key** for SUPABASE_KEY (not service_role)
+- ANTHROPIC_API_KEY stays **server-side only**
+- Mobile app only needs SUPABASE_URL and SUPABASE_KEY
+
+### If a Key is Exposed
+
+1. **Anthropic**: Revoke at https://console.anthropic.com/settings/keys
+2. **Supabase**: Reset at your project's Settings → API
+3. **Gmail**: Revoke at https://myaccount.google.com/permissions
 
 ## Troubleshooting
 
-### "SUPABASE_URL and SUPABASE_KEY environment variables must be set"
-Make sure you've exported the environment variables or set them in GitHub Secrets.
-
-### "credentials.json not found"
-Either place the file in `email-parser/` directory or set the `GMAIL_CREDENTIALS` environment variable.
+### "SUPABASE_URL and SUPABASE_KEY must be set"
+Export environment variables or check your `.env` file.
 
 ### OAuth errors
 - Ensure Gmail API is enabled in Google Cloud Console
-- Verify your email is added as a test user in OAuth consent screen
-- Check that redirect URI is set to `http://localhost`
+- Add your email as a test user in OAuth consent screen
+- Check redirect URI is `http://localhost`
 
-### Storage bucket errors
-Make sure the `email-attachments` bucket exists in your Supabase project.
+### Token expiration
+If GMAIL_TOKEN expires, regenerate locally by running `fetch_and_store_emails.py` and completing the OAuth flow again.

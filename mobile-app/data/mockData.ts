@@ -1,0 +1,112 @@
+import { InboxItem, Student } from '../types';
+
+export const mockInboxItems: InboxItem[] = [
+  {
+    id: '1',
+    itemType: 'task',
+    title: 'Return Permission Slip - Zoo Field Trip',
+    date: '2024-12-03',
+    grade: 'K',
+    teacher: 'Ms. Bailey',
+    isRequired: true,
+    description: 'Please sign and return the permission slip for the zoo field trip. Cost: $15.',
+  },
+  {
+    id: '2',
+    itemType: 'event',
+    title: 'Winter Concert',
+    date: '2024-12-12',
+    grade: 'All Grades',
+    teacher: null,
+    eventType: 'Celebration',
+    description: 'Annual winter concert in the gymnasium at 6:00 PM. All families welcome!',
+  },
+  {
+    id: '3',
+    itemType: 'task',
+    title: 'Bring Canned Goods for Food Drive',
+    date: '2024-12-06',
+    grade: 'All Grades',
+    teacher: null,
+    isRequired: false,
+    description: 'Donate canned goods for the school food drive. Drop off in the main office.',
+  },
+  {
+    id: '4',
+    itemType: 'event',
+    title: 'No School - Teacher Professional Development',
+    date: '2024-12-05',
+    grade: 'All Grades',
+    teacher: null,
+    eventType: 'No School',
+    description: 'School closed for staff professional development day.',
+  },
+  {
+    id: '5',
+    itemType: 'task',
+    title: 'Complete Reading Log',
+    date: 'Ongoing',
+    grade: '3rd',
+    teacher: 'Mr. Davis',
+    isRequired: true,
+    description: 'Students should read 20 minutes daily and log in their reading journals.',
+  },
+  {
+    id: '6',
+    itemType: 'event',
+    title: 'Science Fair',
+    date: '2024-12-18',
+    grade: '3rd-5th',
+    teacher: null,
+    eventType: 'Showcase',
+    description: 'Students will present their science projects in the cafeteria from 5-7 PM.',
+  },
+  {
+    id: '7',
+    itemType: 'task',
+    title: 'Volunteer Sign-up: Holiday Party',
+    date: '2024-12-10',
+    grade: 'K',
+    teacher: 'Ms. Bailey',
+    isRequired: false,
+    description: 'Sign up to help with the classroom holiday party on December 20th.',
+  },
+];
+
+export const mockMaybeLaterItems: InboxItem[] = [
+  {
+    id: '8',
+    itemType: 'event',
+    title: 'PTA Meeting',
+    date: '2024-12-14',
+    grade: 'All Grades',
+    teacher: null,
+    eventType: 'Meeting',
+    description: 'Monthly PTA meeting in the library at 7 PM.',
+  },
+  {
+    id: '9',
+    itemType: 'task',
+    title: 'Book Fair Volunteer Shifts',
+    date: '2024-12-11',
+    grade: 'All Grades',
+    teacher: null,
+    isRequired: false,
+    description: 'Sign up for a volunteer shift during the book fair week.',
+  },
+];
+
+export const mockStudents: Student[] = [
+  {
+    id: '1',
+    name: 'Emma',
+    grade: 'K',
+    teacher: 'Ms. Bailey',
+  },
+  {
+    id: '2',
+    name: 'Jake',
+    grade: '3rd',
+    teacher: 'Mr. Davis',
+  },
+];

@@ -1,0 +1,63 @@
+You are analyzing an email from a school (Brent Elementary) sent to parents.
+
+## Task 1: Privacy Check
+
+First, determine if this email should be processed. The email should be ACCEPTED if it is intended for wide distribution (all parents in a class, grade, or school-wide). The email should be REJECTED if it contains information specific to an individual student (grades, behavior, individual meetings, etc.).
+
+## Task 2: Item Extraction (only if privacy check passes)
+
+If the email passes the privacy check, extract each distinct item/topic from the email as a separate entry. Each item should be a self-contained piece of information that a parent might want to track, save, or be reminded about.
+
+Examples of items:
+- An upcoming event with date/time
+- A task or action item (form to fill out, donation request, volunteer opportunity)
+- An announcement or update
+- A deadline or due date
+- A schedule change
+
+## Critical Instructions for Content Extraction
+
+- **PRESERVE THE EXACT HTML/TEXT**: Copy the relevant portion of the email verbatim for each item. Do not summarize, paraphrase, or rewrite. Parents need to see the school's exact language.
+- **Include all details**: Dates, times, locations, costs, links, contact info - everything in the original text for that item.
+- **Separate distinct topics**: If an email covers multiple topics (e.g., a field trip AND a bake sale), extract each as a separate item.
+- **Include surrounding context**: If an item references something earlier in the email, include enough context to make it understandable.
+
+## Attachment Matching
+
+If the email has attachments and an item references an attachment (e.g., "see attached permission slip", "fill out the attached form"), include the attachment filename(s) in that item.
+
+## Output Format
+
+Return a JSON object in this exact format:
+
+If privacy check PASSES:
+```json
+{{
+  "privacy_check_passed": true,
+  "items": [
+    {{
+      "content": "<exact HTML/text from email for this item>",
+      "date": "YYYY-MM-DD or null if no specific date",
+      "attachment_filenames": ["filename.pdf"] or []
+    }}
+  ]
+}}
+```
+
+If privacy check FAILS:
+```json
+{{
+  "privacy_check_passed": false,
+  "reason": "<brief explanation of why this email is student-specific>"
+}}
+```
+
+## Email to Analyze
+
+Subject: {subject}
+From: {from_address}
+Date: {date}
+Attachments: {attachments}
+
+Body:
+{body}
