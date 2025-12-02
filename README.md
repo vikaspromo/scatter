@@ -25,7 +25,7 @@ git clone https://github.com/yourusername/scatter.git
 cd scatter
 
 # Python dependencies
-pip install -r email-parser/requirements.txt
+pip install -r backend/requirements.txt
 
 # Mobile app dependencies
 cd mobile-app && npm install
@@ -49,11 +49,11 @@ ANTHROPIC_API_KEY=sk-ant-...
 1. Go to [Google Cloud Console](https://console.cloud.google.com)
 2. Enable Gmail API
 3. Create OAuth 2.0 credentials (Desktop app)
-4. Download `credentials.json` to `email-parser/`
+4. Download `credentials.json` to `backend/`
 5. Run the fetch script - it will prompt for OAuth:
 
 ```bash
-cd email-parser
+cd backend
 python3 fetch_and_store_emails.py
 ```
 
@@ -68,13 +68,12 @@ npx expo start
 
 ```
 scatter/
-├── email-parser/          # Gmail fetching + Claude processing
+├── backend/               # Email fetching, Claude processing, prompts
 │   ├── fetch_and_store_emails.py
+│   ├── config.py
+│   ├── prompts/
 │   ├── credentials.json   # (not in git)
 │   └── token.json         # (not in git)
-├── ai-processor/          # Claude prompts and config
-│   ├── config.py
-│   └── prompts/
 ├── mobile-app/            # Expo React Native app
 ├── migrations/            # Database migrations
 ├── temp/                  # One-time scripts

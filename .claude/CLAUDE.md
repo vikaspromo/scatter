@@ -13,8 +13,7 @@ Scatter helps parents at Brent Elementary manage school emails by:
 ```
 scatter/
 ├── .claude/           # Claude Code guidance (this file, USE-CASES.md)
-├── email-parser/      # Gmail fetching script
-├── ai-processor/      # Config and prompts for Claude
+├── backend/           # Email fetching, Claude processing, prompts
 ├── mobile-app/        # Expo/React Native app
 ├── migrations/        # Database migrations (keep versioned)
 ├── temp/              # One-time scripts, experiments, old files
@@ -35,9 +34,9 @@ Database migrations stay versioned here, even after applied.
 
 | Script | Purpose |
 |--------|---------|
-| `email-parser/fetch_and_store_emails.py` | Fetches emails, runs privacy check, stores items |
-| `ai-processor/config.py` | Loads API keys from .env |
-| `ai-processor/prompts/parse_email.txt` | Claude prompt for privacy check + item extraction |
+| `backend/fetch_and_store_emails.py` | Fetches emails, runs privacy check, stores items |
+| `backend/config.py` | Loads API keys from .env |
+| `backend/prompts/parse_email.txt` | Claude prompt for privacy check + item extraction |
 
 ## Environment Variables
 

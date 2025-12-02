@@ -46,7 +46,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # Load prompt template
-PROMPT_PATH = Path(__file__).parent.parent / 'ai-processor' / 'prompts' / 'parse_email.txt'
+PROMPT_PATH = Path(__file__).parent / 'prompts' / 'parse_email.txt'
 PROMPT_TEMPLATE = PROMPT_PATH.read_text()
 
 
