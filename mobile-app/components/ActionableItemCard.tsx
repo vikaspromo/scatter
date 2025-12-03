@@ -189,7 +189,6 @@ export default function ActionableItemCard({
         <RNView style={styles.header}>
           <RNView style={styles.headerLeft}>
             <Text style={styles.senderName}>{senderName}</Text>
-            <Text style={styles.emailDate}>{emailDate}</Text>
           </RNView>
 
           {showDateBadge && eventDate && (
@@ -198,29 +197,6 @@ export default function ActionableItemCard({
               <Text style={styles.dateBadgeText}>{eventDate}</Text>
             </RNView>
           )}
-
-          <RNView style={styles.actionButtons}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                onArchive();
-              }}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <FontAwesome name="archive" size={18} color="#999" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.remindButton]}
-              onPress={(e) => {
-                e.stopPropagation();
-                onRemind();
-              }}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <FontAwesome name="bell" size={18} color="#007AFF" />
-            </TouchableOpacity>
-          </RNView>
         </RNView>
 
         {/* Content */}
@@ -232,17 +208,34 @@ export default function ActionableItemCard({
           </Text>
         )}
 
-        {/* Subject line */}
-        <Text style={styles.subject} numberOfLines={1}>
-          "{item.subject}"
+        {/* Footer: email source */}
+        <Text style={styles.footer} numberOfLines={2}>
+          Via email "{item.subject}" sent on {emailDate}
         </Text>
 
-        {/* Expand hint */}
-        {!expanded && (
-          <RNView style={styles.expandHint}>
-            <FontAwesome name="chevron-down" size={10} color="#ccc" />
-          </RNView>
-        )}
+        {/* Action buttons */}
+        <RNView style={styles.bottomActions}>
+          <TouchableOpacity
+            style={styles.bottomActionButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              onArchive();
+            }}
+          >
+            <FontAwesome name="archive" size={16} color="#8E8E93" />
+            <Text style={styles.bottomActionText}>Archive</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.bottomActionButton, styles.remindActionButton]}
+            onPress={(e) => {
+              e.stopPropagation();
+              onRemind();
+            }}
+          >
+            <FontAwesome name="bell" size={16} color="#007AFF" />
+            <Text style={[styles.bottomActionText, styles.remindActionText]}>Add to reminders</Text>
+          </TouchableOpacity>
+        </RNView>
       </TouchableOpacity>
     </Swipeable>
   );
@@ -284,10 +277,6 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     color: colors.textPrimary,
   },
-  emailDate: {
-    fontSize: 13,
-    color: colors.textMuted,
-  },
   dateBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -305,15 +294,6 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     color: '#fff',
   },
-  actionButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  actionButton: {
-    padding: 6,
-  },
-  remindButton: {},
   contentCollapsed: {
     fontSize: fontSize.base,
     color: colors.textPrimary,
@@ -324,15 +304,35 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     lineHeight: lineHeight.base,
   },
-  subject: {
+  footer: {
     fontSize: 13,
     color: colors.textSecondary,
     fontStyle: 'italic',
     marginTop: 8,
   },
-  expandHint: {
+  bottomActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  bottomActionButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    gap: 5,
+  },
+  remindActionButton: {},
+  bottomActionText: {
+    fontSize: 14,
+    color: '#8E8E93',
+    fontWeight: fontWeight.medium,
+  },
+  remindActionText: {
+    color: '#007AFF',
   },
   link: {
     color: '#007AFF',

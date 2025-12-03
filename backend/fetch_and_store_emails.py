@@ -3,6 +3,7 @@
 Fetch emails from Gmail with attachments and store in Supabase.
 Privacy check happens BEFORE storing - only emails that pass are stored with body.
 """
+from __future__ import annotations
 
 import os
 import sys

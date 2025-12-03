@@ -1,5 +1,6 @@
 import React from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 
 import Colors from '@/constants/Colors';
