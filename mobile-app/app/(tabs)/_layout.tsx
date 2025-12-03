@@ -33,7 +33,7 @@ export default function TabLayout() {
         name="reminders"
         options={{
           title: 'Bookmarks',
-          tabBarIcon: ({ color }) => <TabBarIcon name="bookmark-o" color={color} />,
+          tabBarIcon: ({ color }) => <TabBarIcon name="bookmark" color={color} />,
         }}
       />
       <Tabs.Screen

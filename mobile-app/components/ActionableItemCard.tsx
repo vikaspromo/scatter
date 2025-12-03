@@ -3,10 +3,13 @@ import {
   StyleSheet,
   View as RNView,
   TouchableOpacity,
+  Pressable,
   Platform,
   Animated,
   Linking,
   Text as RNText,
+  ActionSheetIOS,
+  Alert,
 } from 'react-native';
 import { Text, useThemeColor } from '@/components/Themed';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -104,6 +107,14 @@ function parseSenderName(fromAddress: string): string {
   return name;
 }
 
+type ReminderTime = '8pm_night_before' | '7am_morning' | 'off';
+
+const REMINDER_OPTIONS: { value: ReminderTime; label: string }[] = [
+  { value: '8pm_night_before', label: '8pm the night before' },
+  { value: '7am_morning', label: '7am that morning' },
+  { value: 'off', label: 'Reminder off' },
+];
+
 export default function ActionableItemCard({
   item,
   onArchive,
@@ -114,6 +125,10 @@ export default function ActionableItemCard({
 }: ActionableItemCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(initialBookmarked);
+  const [reminderTime, setReminderTime] = useState<ReminderTime>(
+    initialBookmarked && item.date_start ? '8pm_night_before' : 'off'
+  );
+  const [showReminderMenu, setShowReminderMenu] = useState(false);
   const swipeableRef = useRef<Swipeable>(null);
 
   // Theme colors
@@ -162,6 +177,59 @@ export default function ActionableItemCard({
     const newState = !isBookmarked;
     setIsBookmarked(newState);
     onBookmarkToggle(newState);
+    // When bookmarking an item with a date, default to 8pm reminder
+    if (newState && item.date_start) {
+      setReminderTime('8pm_night_before');
+    } else if (!newState) {
+      setReminderTime('off');
+    }
+  };
+
+  const showReminderOptions = () => {
+    const options = [...REMINDER_OPTIONS.map(o => o.label), 'Cancel'];
+    const cancelButtonIndex = options.length - 1;
+
+    if (Platform.OS === 'web') {
+      // Web: toggle dropdown menu
+      setShowReminderMenu(!showReminderMenu);
+    } else if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex,
+          title: 'Reminder Time',
+        },
+        (buttonIndex) => {
+          if (buttonIndex !== cancelButtonIndex) {
+            setReminderTime(REMINDER_OPTIONS[buttonIndex].value);
+          }
+        }
+      );
+    } else {
+      // Android fallback using Alert
+      Alert.alert(
+        'Reminder Time',
+        'When would you like to be reminded?',
+        [
+          ...REMINDER_OPTIONS.map((option) => ({
+            text: option.label,
+            onPress: () => setReminderTime(option.value),
+          })),
+          { text: 'Cancel', style: 'cancel' as const },
+        ]
+      );
+    }
+  };
+
+  const selectReminderOption = (value: ReminderTime) => {
+    setReminderTime(value);
+    setShowReminderMenu(false);
+  };
+
+  const getReminderLabel = () => {
+    if (reminderTime === '8pm_night_before') return '8pm night before';
+    if (reminderTime === '7am_morning') return '7am morning of';
+    return null;
   };
 
   const renderLeftActions = (
@@ -268,15 +336,65 @@ export default function ActionableItemCard({
             <FontAwesome name="archive" size={16} color={textSecondary} />
             <Text style={[styles.bottomActionText, { color: textSecondary }]}>Archive</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.bottomActionButton, styles.remindActionButton]}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleBookmarkToggle();
-            }}
-          >
-            <FontAwesome name={isBookmarked ? "bookmark" : "bookmark-o"} size={18} color={tint} />
-          </TouchableOpacity>
+          <RNView style={styles.bookmarkContainer}>
+            {isBookmarked && item.date_start && (
+              <RNView style={styles.reminderWrapper}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.notificationButton,
+                    pressed && { opacity: 0.6 }
+                  ]}
+                  onPress={() => {
+                    showReminderOptions();
+                  }}
+                >
+                  <FontAwesome
+                    name={reminderTime !== 'off' ? 'bell' : 'bell-o'}
+                    size={14}
+                    color={reminderTime !== 'off' ? tint : textMuted}
+                  />
+                  {getReminderLabel() && (
+                    <Text style={[styles.notificationText, { color: reminderTime !== 'off' ? tint : textMuted }]}>
+                      {getReminderLabel()}
+                    </Text>
+                  )}
+                </Pressable>
+                {Platform.OS === 'web' && showReminderMenu && (
+                  <RNView style={[styles.reminderMenu, { backgroundColor: cardBackground, borderColor: border }]}>
+                    {REMINDER_OPTIONS.map((option) => (
+                      <Pressable
+                        key={option.value}
+                        style={({ pressed }) => [
+                          styles.reminderMenuItem,
+                          pressed && { backgroundColor: border }
+                        ]}
+                        onPress={() => selectReminderOption(option.value)}
+                      >
+                        <Text style={[
+                          styles.reminderMenuText,
+                          { color: reminderTime === option.value ? tint : textPrimary }
+                        ]}>
+                          {option.label}
+                        </Text>
+                        {reminderTime === option.value && (
+                          <FontAwesome name="check" size={12} color={tint} />
+                        )}
+                      </Pressable>
+                    ))}
+                  </RNView>
+                )}
+              </RNView>
+            )}
+            <TouchableOpacity
+              style={[styles.bottomActionButton, styles.remindActionButton]}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleBookmarkToggle();
+              }}
+            >
+              <FontAwesome name={isBookmarked ? "bookmark" : "bookmark-o"} size={18} color={tint} />
+            </TouchableOpacity>
+          </RNView>
         </RNView>
       </TouchableOpacity>
     </Swipeable>
@@ -360,6 +478,55 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   remindActionButton: {},
+  bookmarkContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  reminderWrapper: {
+    position: 'relative',
+  },
+  notificationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    gap: 4,
+  },
+  notificationText: {
+    fontSize: 12,
+  },
+  reminderMenu: {
+    position: 'absolute',
+    bottom: '100%',
+    right: 0,
+    marginBottom: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    minWidth: 160,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 4,
+      },
+    }),
+  },
+  reminderMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  reminderMenuText: {
+    fontSize: 14,
+  },
   bottomActionText: {
     fontSize: 14,
     fontWeight: fontWeight.medium,

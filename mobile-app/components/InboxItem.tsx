@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { StyleSheet, View as RNView, ScrollView, NativeSyntheticEvent, NativeScrollEvent, Platform, Linking, Text as RNText } from 'react-native';
-import { Text, View } from '@/components/Themed';
+import { Text, View, useThemeColor } from '@/components/Themed';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { InboxItem as InboxItemType } from '@/types';
-import { fontSize, fontWeight, lineHeight, colors } from '@/constants/Typography';
+import { fontSize, fontWeight, lineHeight } from '@/constants/Typography';
 
 // Component that renders text with clickable links
-function LinkedText({ children, style }: { children: string; style?: any }) {
+function LinkedText({ children, style, linkColor }: { children: string; style?: any; linkColor: string }) {
   // Match URLs: both <url> format and plain URLs
   // This regex matches:
   // 1. <https://...> or <http://...> format
@@ -67,7 +67,7 @@ function LinkedText({ children, style }: { children: string; style?: any }) {
           return (
             <RNText
               key={index}
-              style={linkStyles.link}
+              style={{ color: linkColor, textDecorationLine: 'underline' }}
               onPress={() => handlePress(part.url!)}
             >
               {part.content}
@@ -79,13 +79,6 @@ function LinkedText({ children, style }: { children: string; style?: any }) {
     </Text>
   );
 }
-
-const linkStyles = StyleSheet.create({
-  link: {
-    color: '#007AFF',
-    textDecorationLine: 'underline',
-  },
-});
 
 interface Props {
   item: InboxItemType;
@@ -133,6 +126,13 @@ function parseEmailAddress(fromAddress: string): string {
 }
 
 export default function InboxItem({ item }: Props) {
+  // Theme colors
+  const cardBackground = useThemeColor({}, 'cardBackground');
+  const textPrimary = useThemeColor({}, 'textPrimary');
+  const textSecondary = useThemeColor({}, 'textSecondary');
+  const textMuted = useThemeColor({}, 'textMuted');
+  const tint = useThemeColor({}, 'tint');
+
   const emailDateDisplay = formatEmailDate(item.email_date);
   const senderName = parseSenderName(item.from_address);
   const emailAddress = parseEmailAddress(item.from_address);
@@ -170,10 +170,10 @@ export default function InboxItem({ item }: Props) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: cardBackground }]}>
       {/* Email metadata */}
       <RNView style={styles.header}>
-        <Text style={styles.metaText}>From {senderName}</Text>
+        <Text style={[styles.metaText, { color: textSecondary }]}>From {senderName}</Text>
       </RNView>
 
       {/* Content - school's exact message */}
@@ -185,21 +185,21 @@ export default function InboxItem({ item }: Props) {
         onLayout={handleLayout}
         scrollEventThrottle={16}
       >
-        <LinkedText style={styles.content}>{item.content}</LinkedText>
+        <LinkedText style={[styles.content, { color: textPrimary }]} linkColor={tint}>{item.content}</LinkedText>
 
         {/* Source email footer - scrolls with content */}
         <RNView style={styles.footer}>
-          <Text style={styles.footerText}>{emailAddress}</Text>
-          <Text style={styles.footerText}>Subject: "{item.subject}"</Text>
-          <Text style={styles.footerText}>Sent {emailDateDisplay}</Text>
+          <Text style={[styles.footerText, { color: textSecondary }]}>{emailAddress}</Text>
+          <Text style={[styles.footerText, { color: textSecondary }]}>Subject: "{item.subject}"</Text>
+          <Text style={[styles.footerText, { color: textSecondary }]}>Sent {emailDateDisplay}</Text>
         </RNView>
       </ScrollView>
 
       {/* Scroll hint - shows when content overflows */}
       {shouldShowHint && (
         <RNView style={styles.scrollHint}>
-          <FontAwesome name="chevron-down" size={12} color="#999" />
-          <Text style={styles.scrollHintText}>Scroll for more</Text>
+          <FontAwesome name="chevron-down" size={12} color={textMuted} />
+          <Text style={[styles.scrollHintText, { color: textMuted }]}>Scroll for more</Text>
         </RNView>
       )}
     </View>
@@ -208,7 +208,6 @@ export default function InboxItem({ item }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.cardBackground,
     borderRadius: 12,
     padding: 16,
     marginHorizontal: 16,
@@ -235,7 +234,6 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: fontSize.base,
     fontWeight: fontWeight.bold,
-    color: colors.textSecondary,
     flex: 1,
   },
   contentScroll: {
@@ -243,7 +241,6 @@ const styles = StyleSheet.create({
   },
   content: {
     fontSize: fontSize.base,
-    color: colors.textPrimary,
     lineHeight: lineHeight.base,
   },
   footer: {
@@ -253,7 +250,6 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 13,
     fontStyle: 'italic',
-    color: colors.textSecondary,
     lineHeight: 18,
     textAlign: 'right',
   },
@@ -264,6 +260,5 @@ const styles = StyleSheet.create({
   },
   scrollHintText: {
     fontSize: 12,
-    color: '#999',
   },
 });

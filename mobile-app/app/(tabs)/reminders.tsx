@@ -14,6 +14,7 @@ interface Section {
   title: string;
   date: string | null;
   isMajorHeader?: boolean; // For "Coming up" and "Additional bookmarks" headers
+  subtitle?: string; // Optional subtitle for major headers
   data: InboxItemType[];
 }
 
@@ -98,20 +99,27 @@ function SectionHeader({
   title,
   hasDate,
   isMajorHeader,
+  subtitle,
   eventOrange,
   textSecondary,
+  textMuted,
 }: {
   title: string;
   hasDate: boolean;
   isMajorHeader?: boolean;
+  subtitle?: string;
   eventOrange: string;
   textSecondary: string;
+  textMuted: string;
 }) {
   // Major headers ("Coming up", "Additional bookmarks") are plain text
   if (isMajorHeader) {
     return (
       <RNView style={styles.majorHeaderContainer}>
         <Text style={[styles.majorHeaderTitle, { color: textSecondary }]}>{title}</Text>
+        {subtitle && (
+          <Text style={[styles.majorHeaderSubtitle, { color: textMuted }]}>{subtitle}</Text>
+        )}
       </RNView>
     );
   }
@@ -272,8 +280,10 @@ export default function RemindersScreen() {
             title={section.title}
             hasDate={section.date !== null}
             isMajorHeader={section.isMajorHeader}
+            subtitle={section.subtitle}
             eventOrange={eventOrange}
             textSecondary={textSecondary}
+            textMuted={textMuted}
           />
         )}
         contentContainerStyle={styles.listContent}
@@ -319,6 +329,10 @@ const styles = StyleSheet.create({
   majorHeaderTitle: {
     fontSize: 17,
     fontWeight: '600',
+  },
+  majorHeaderSubtitle: {
+    fontSize: 13,
+    marginTop: 2,
   },
   emptyContainer: {
     flex: 1,

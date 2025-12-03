@@ -70,3 +70,35 @@ export function formatSectionHeader(dateStr: string | null): string {
 
   return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 }
+
+/**
+ * Format a datetime for relative display (Instagram-style).
+ * - < 1 min: "just now"
+ * - < 60 min: "Xm ago"
+ * - < 24 hours: "Xh ago"
+ * - < 7 days: "Xd ago"
+ * - >= 7 days: "Mon DD" format (e.g., "Nov 28")
+ */
+export function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMins < 1) {
+    return 'just now';
+  }
+  if (diffMins < 60) {
+    return `${diffMins}m ago`;
+  }
+  if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
+  if (diffDays < 7) {
+    return `${diffDays}d ago`;
+  }
+
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
