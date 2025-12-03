@@ -8,11 +8,11 @@ import {
   Linking,
   Text as RNText,
 } from 'react-native';
-import { Text } from '@/components/Themed';
+import { Text, useThemeColor } from '@/components/Themed';
 import { Swipeable } from 'react-native-gesture-handler';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { InboxItem as InboxItemType } from '@/types';
-import { fontSize, fontWeight, lineHeight, colors } from '@/constants/Typography';
+import { fontSize, fontWeight, lineHeight } from '@/constants/Typography';
 import { formatEventDate } from '@/lib/dateUtils';
 
 interface ActionableItemCardProps {
@@ -23,7 +23,7 @@ interface ActionableItemCardProps {
 }
 
 // Component that renders text with clickable links
-function LinkedText({ children, style }: { children: string; style?: any }) {
+function LinkedText({ children, style, linkColor }: { children: string; style?: any; linkColor: string }) {
   const urlRegex = /(?:<(https?:\/\/[^>]+)>|(https?:\/\/[^\s<]+))/gi;
 
   const parts: Array<{ type: 'text' | 'link'; content: string; url?: string }> = [];
@@ -67,7 +67,7 @@ function LinkedText({ children, style }: { children: string; style?: any }) {
           return (
             <RNText
               key={index}
-              style={styles.link}
+              style={{ color: linkColor, textDecorationLine: 'underline' }}
               onPress={() => handlePress(part.url!)}
             >
               {part.content}
@@ -113,6 +113,15 @@ export default function ActionableItemCard({
   const [expanded, setExpanded] = useState(false);
   const swipeableRef = useRef<Swipeable>(null);
 
+  // Theme colors
+  const cardBackground = useThemeColor({}, 'cardBackground');
+  const textPrimary = useThemeColor({}, 'textPrimary');
+  const textSecondary = useThemeColor({}, 'textSecondary');
+  const textMuted = useThemeColor({}, 'textMuted');
+  const border = useThemeColor({}, 'border');
+  const tint = useThemeColor({}, 'tint');
+  const eventOrange = useThemeColor({}, 'eventOrange');
+
   const senderName = parseSenderName(item.from_address);
   const emailDate = formatEmailDate(item.email_date);
   const eventDate = formatEventDate(item.date_start, item.date_end);
@@ -137,7 +146,7 @@ export default function ActionableItemCard({
     });
 
     return (
-      <RNView style={styles.leftAction}>
+      <RNView style={[styles.leftAction, { backgroundColor: tint }]}>
         <Animated.View style={[styles.actionContent, { transform: [{ translateX: trans }] }]}>
           <FontAwesome name="bell" size={20} color="#fff" />
           <Text style={styles.actionText}>Remind</Text>
@@ -156,7 +165,7 @@ export default function ActionableItemCard({
     });
 
     return (
-      <RNView style={styles.rightAction}>
+      <RNView style={[styles.rightAction, { backgroundColor: textSecondary }]}>
         <Animated.View style={[styles.actionContent, { transform: [{ translateX: trans }] }]}>
           <FontAwesome name="archive" size={20} color="#fff" />
           <Text style={styles.actionText}>Archive</Text>
@@ -181,40 +190,46 @@ export default function ActionableItemCard({
       overshootRight={false}
     >
       <TouchableOpacity
-        style={styles.container}
+        style={[styles.container, { backgroundColor: cardBackground }]}
         onPress={() => setExpanded(!expanded)}
         activeOpacity={0.9}
       >
-        {/* Header row: sender, date badge, action buttons */}
+        {/* Header row: sender, date badge */}
         <RNView style={styles.header}>
           <RNView style={styles.headerLeft}>
-            <Text style={styles.senderName}>{senderName}</Text>
+            <Text style={[styles.senderName, { color: textPrimary }]}>{senderName}</Text>
           </RNView>
 
           {showDateBadge && eventDate && (
-            <RNView style={styles.dateBadge}>
+            <RNView style={[styles.dateBadge, { backgroundColor: eventOrange }]}>
               <FontAwesome name="calendar" size={10} color="#fff" style={styles.dateBadgeIcon} />
               <Text style={styles.dateBadgeText}>{eventDate}</Text>
             </RNView>
           )}
         </RNView>
 
-        {/* Content */}
-        {expanded ? (
-          <LinkedText style={styles.contentExpanded}>{item.content}</LinkedText>
-        ) : (
-          <Text style={styles.contentCollapsed} numberOfLines={3}>
-            {item.content}
-          </Text>
-        )}
-
-        {/* Footer: email source */}
-        <Text style={styles.footer} numberOfLines={2}>
+        {/* Email source line */}
+        <Text style={[styles.emailSource, { color: textSecondary }]} numberOfLines={2}>
           Via email "{item.subject}" sent on {emailDate}
         </Text>
 
+        {/* Content */}
+        {expanded ? (
+          <LinkedText style={[styles.contentExpanded, { color: textPrimary }]} linkColor={tint}>{item.content}</LinkedText>
+        ) : (
+          <RNView>
+            <Text style={[styles.contentCollapsed, { color: textPrimary }]} numberOfLines={3}>
+              {item.content}
+            </Text>
+            <RNView style={styles.expandHint}>
+              <FontAwesome name="chevron-down" size={12} color={textMuted} />
+              <Text style={[styles.expandHintText, { color: textMuted }]}>Tap to see more</Text>
+            </RNView>
+          </RNView>
+        )}
+
         {/* Action buttons */}
-        <RNView style={styles.bottomActions}>
+        <RNView style={[styles.bottomActions, { borderTopColor: border }]}>
           <TouchableOpacity
             style={styles.bottomActionButton}
             onPress={(e) => {
@@ -222,8 +237,8 @@ export default function ActionableItemCard({
               onArchive();
             }}
           >
-            <FontAwesome name="archive" size={16} color="#8E8E93" />
-            <Text style={styles.bottomActionText}>Archive</Text>
+            <FontAwesome name="archive" size={16} color={textSecondary} />
+            <Text style={[styles.bottomActionText, { color: textSecondary }]}>Archive</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.bottomActionButton, styles.remindActionButton]}
@@ -232,8 +247,8 @@ export default function ActionableItemCard({
               onRemind();
             }}
           >
-            <FontAwesome name="bell" size={16} color="#007AFF" />
-            <Text style={[styles.bottomActionText, styles.remindActionText]}>Add to reminders</Text>
+            <FontAwesome name="bell" size={16} color={tint} />
+            <Text style={[styles.bottomActionText, { color: tint }]}>Add to reminders</Text>
           </TouchableOpacity>
         </RNView>
       </TouchableOpacity>
@@ -243,7 +258,6 @@ export default function ActionableItemCard({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.cardBackground,
     marginHorizontal: 16,
     marginVertical: 6,
     borderRadius: 12,
@@ -275,12 +289,10 @@ const styles = StyleSheet.create({
   senderName: {
     fontSize: fontSize.base,
     fontWeight: fontWeight.semibold,
-    color: colors.textPrimary,
   },
   dateBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FF6D00',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -296,19 +308,26 @@ const styles = StyleSheet.create({
   },
   contentCollapsed: {
     fontSize: fontSize.base,
-    color: colors.textPrimary,
     lineHeight: lineHeight.base,
   },
   contentExpanded: {
     fontSize: fontSize.base,
-    color: colors.textPrimary,
     lineHeight: lineHeight.base,
   },
-  footer: {
+  emailSource: {
     fontSize: 13,
-    color: colors.textSecondary,
     fontStyle: 'italic',
+    marginBottom: 8,
+  },
+  expandHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 8,
+    gap: 4,
+  },
+  expandHintText: {
+    fontSize: 12,
   },
   bottomActions: {
     flexDirection: 'row',
@@ -316,7 +335,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
   },
   bottomActionButton: {
     flexDirection: 'row',
@@ -328,18 +346,9 @@ const styles = StyleSheet.create({
   remindActionButton: {},
   bottomActionText: {
     fontSize: 14,
-    color: '#8E8E93',
     fontWeight: fontWeight.medium,
   },
-  remindActionText: {
-    color: '#007AFF',
-  },
-  link: {
-    color: '#007AFF',
-    textDecorationLine: 'underline',
-  },
   leftAction: {
-    backgroundColor: '#007AFF',
     justifyContent: 'center',
     marginVertical: 6,
     borderTopLeftRadius: 12,
@@ -347,7 +356,6 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
   rightAction: {
-    backgroundColor: '#8E8E93',
     justifyContent: 'center',
     alignItems: 'flex-end',
     marginVertical: 6,
