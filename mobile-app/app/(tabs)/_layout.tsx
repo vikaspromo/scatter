@@ -30,10 +30,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="later"
+        name="reminders"
         options={{
           title: 'Reminders',
-          tabBarIcon: ({ color }) => <TabBarIcon name="bookmark" color={color} />,
+          tabBarIcon: ({ color }) => <TabBarIcon name="bell" color={color} />,
         }}
       />
       <Tabs.Screen

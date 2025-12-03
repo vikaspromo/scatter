@@ -31,7 +31,7 @@ export interface DbUserItem {
   id: string;
   user_id: string;
   item_id: string;
-  status: 'inbox' | 'done' | 'remind';
+  status: 'inbox' | 'archived' | 'remind';
   remind_at: string | null;
   created_at: string;
   updated_at: string;
@@ -44,7 +44,7 @@ export async function fetchInboxItems(userId: string): Promise<(DbItem & { email
     .from('user_items')
     .select('item_id')
     .eq('user_id', userId)
-    .in('status', ['done', 'remind']);
+    .in('status', ['archived', 'remind']);
 
   if (triagedError) {
     console.error('Error fetching triaged items:', triagedError);
@@ -174,7 +174,7 @@ export async function fetchRemindedItems(userId: string): Promise<(DbItem & { em
 export async function updateUserItemStatus(
   userId: string,
   itemId: string,
-  status: 'inbox' | 'done' | 'remind',
+  status: 'inbox' | 'archived' | 'remind',
   remindAt?: string
 ) {
   const { data, error } = await supabase

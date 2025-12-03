@@ -12,12 +12,12 @@ export interface InboxItem {
   created_at: string;
 }
 
-export type TriageDecision = 'done' | 'remind';
+export type TriageDecision = 'archived' | 'remind';
 
 export interface UserItemStatus {
   user_id: string;
   item_id: string;
-  status: 'inbox' | 'done' | 'remind';
+  status: 'inbox' | 'archived' | 'remind';
   remind_at: string | null;
 }
 

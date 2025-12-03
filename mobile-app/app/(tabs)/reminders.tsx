@@ -1,13 +1,14 @@
-import { StyleSheet, SectionList, ActivityIndicator, TouchableOpacity, View as RNView, Platform } from 'react-native';
+import { StyleSheet, SectionList, ActivityIndicator, View as RNView } from 'react-native';
 import { Text, View } from '@/components/Themed';
-import { fetchRemindedItems } from '@/lib/supabase';
+import { fetchRemindedItems, updateUserItemStatus } from '@/lib/supabase';
 import { getDeviceId } from '@/lib/deviceId';
 import { InboxItem as InboxItemType } from '@/types';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { formatSectionHeader } from '@/lib/dateUtils';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import ActionableItemCard from '@/components/ActionableItemCard';
 
 interface Section {
   title: string;
@@ -26,14 +27,12 @@ function groupByDate(items: InboxItemType[]): Section[] {
     groups[key].push(item);
   });
 
-  // Convert to sections and sort by date
   const sections: Section[] = Object.entries(groups).map(([key, data]) => ({
     title: formatSectionHeader(key === '__no_date__' ? null : key),
     date: key === '__no_date__' ? null : key,
     data,
   }));
 
-  // Sort sections: dated items first (by date), then no-date items last
   sections.sort((a, b) => {
     if (a.date === null && b.date === null) return 0;
     if (a.date === null) return 1;
@@ -42,23 +41,6 @@ function groupByDate(items: InboxItemType[]): Section[] {
   });
 
   return sections;
-}
-
-interface ReminderItemProps {
-  item: InboxItemType;
-  onPress: () => void;
-}
-
-function ReminderItemCard({ item, onPress }: ReminderItemProps) {
-  return (
-    <TouchableOpacity style={styles.itemContainer} onPress={onPress} activeOpacity={0.7}>
-      <RNView style={styles.itemContent}>
-        <Text style={styles.itemText} numberOfLines={3}>{item.content}</Text>
-        <Text style={styles.subjectText} numberOfLines={1}>"{item.subject}"</Text>
-      </RNView>
-      <FontAwesome name="chevron-right" size={16} color="#ccc" />
-    </TouchableOpacity>
-  );
 }
 
 function SectionHeader({ title, hasDate }: { title: string; hasDate: boolean }) {
@@ -105,7 +87,6 @@ export default function RemindersScreen() {
     }
   }, [deviceId, loadItems]);
 
-  // Reload items when tab becomes focused (e.g., after marking an item as "Remind")
   useFocusEffect(
     useCallback(() => {
       if (deviceId) {
@@ -114,11 +95,24 @@ export default function RemindersScreen() {
     }, [deviceId, loadItems])
   );
 
-  // Group items by date
   const sections = useMemo(() => groupByDate(items), [items]);
 
-  const handleItemPress = (item: InboxItemType) => {
-    router.push(`/reminder/${item.id}`);
+  const handleArchive = async (itemId: string) => {
+    if (!deviceId) return;
+
+    // Optimistically remove from list
+    setItems(items.filter(item => item.id !== itemId));
+
+    try {
+      await updateUserItemStatus(deviceId, itemId, 'archived');
+    } catch (err) {
+      console.error('Failed to archive item:', err);
+    }
+  };
+
+  const handleRemind = (itemId: string) => {
+    // Item is already in reminders, tapping remind just keeps it there
+    // No action needed - the item stays in the list
   };
 
   if (loading) {
@@ -153,14 +147,16 @@ export default function RemindersScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <GestureHandlerRootView style={styles.container}>
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <ReminderItemCard
+          <ActionableItemCard
             item={item}
-            onPress={() => handleItemPress(item)}
+            onArchive={() => handleArchive(item.id)}
+            onRemind={() => handleRemind(item.id)}
+            showDateBadge={false}
           />
         )}
         renderSectionHeader={({ section }) => (
@@ -169,7 +165,7 @@ export default function RemindersScreen() {
         contentContainerStyle={styles.listContent}
         stickySectionHeadersEnabled={false}
       />
-    </View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -179,12 +175,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   listContent: {
-    paddingVertical: 12,
+    paddingVertical: 8,
   },
   sectionHeaderContainer: {
     paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 8,
+    paddingTop: 16,
+    paddingBottom: 4,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -207,42 +203,6 @@ const styles = StyleSheet.create({
   },
   sectionTitleWithDate: {
     color: '#FFFFFF',
-  },
-  itemContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginVertical: 6,
-    borderRadius: 12,
-    padding: 16,
-    ...Platform.select({
-      web: {
-        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 2,
-      },
-    }),
-  },
-  itemContent: {
-    flex: 1,
-    marginRight: 12,
-  },
-  itemText: {
-    fontSize: 15,
-    color: '#333',
-    lineHeight: 20,
-  },
-  subjectText: {
-    fontSize: 13,
-    color: '#666',
-    fontStyle: 'italic',
-    marginTop: 8,
   },
   emptyContainer: {
     flex: 1,
