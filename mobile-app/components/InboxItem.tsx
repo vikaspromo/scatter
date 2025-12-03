@@ -1,17 +1,97 @@
 import React, { useState } from 'react';
-import { StyleSheet, View as RNView, ScrollView, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { StyleSheet, View as RNView, ScrollView, NativeSyntheticEvent, NativeScrollEvent, Platform, Linking, Text as RNText } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { InboxItem as InboxItemType } from '@/types';
 import { fontSize, fontWeight, lineHeight, colors } from '@/constants/Typography';
 
+// Component that renders text with clickable links
+function LinkedText({ children, style }: { children: string; style?: any }) {
+  // Match URLs: both <url> format and plain URLs
+  // This regex matches:
+  // 1. <https://...> or <http://...> format
+  // 2. Plain https:// or http:// URLs (even when attached to words like "herehttps://...")
+  const urlRegex = /(?:<(https?:\/\/[^>]+)>|(https?:\/\/[^\s<]+))/gi;
+
+  const parts: Array<{ type: 'text' | 'link'; content: string; url?: string }> = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = urlRegex.exec(children)) !== null) {
+    // Add text before the match
+    if (match.index > lastIndex) {
+      let textBefore = children.slice(lastIndex, match.index);
+
+      // Check if URL is attached to previous word (no space before it)
+      // Add a space to separate "here" from the URL display
+      if (textBefore.length > 0 && !/\s$/.test(textBefore)) {
+        textBefore += ' ';
+      }
+
+      parts.push({ type: 'text', content: textBefore });
+    }
+
+    // The URL is either in group 1 (angle bracket format) or group 2 (plain URL)
+    const url = match[1] || match[2];
+    parts.push({ type: 'link', content: url, url });
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text
+  if (lastIndex < children.length) {
+    let textAfter = children.slice(lastIndex);
+
+    // Check if text immediately follows URL (no space after it)
+    // Add a space to separate the URL from following text
+    if (parts.length > 0 && parts[parts.length - 1].type === 'link' && textAfter.length > 0 && !/^\s/.test(textAfter)) {
+      textAfter = ' ' + textAfter;
+    }
+
+    parts.push({ type: 'text', content: textAfter });
+  }
+
+  // If no links found, just return plain text
+  if (parts.length === 0) {
+    return <Text style={style}>{children}</Text>;
+  }
+
+  const handlePress = (url: string) => {
+    Linking.openURL(url).catch(err => console.error('Failed to open URL:', err));
+  };
+
+  return (
+    <Text style={style}>
+      {parts.map((part, index) => {
+        if (part.type === 'link') {
+          return (
+            <RNText
+              key={index}
+              style={linkStyles.link}
+              onPress={() => handlePress(part.url!)}
+            >
+              {part.content}
+            </RNText>
+          );
+        }
+        return <RNText key={index}>{part.content}</RNText>;
+      })}
+    </Text>
+  );
+}
+
+const linkStyles = StyleSheet.create({
+  link: {
+    color: '#007AFF',
+    textDecorationLine: 'underline',
+  },
+});
+
 interface Props {
   item: InboxItemType;
 }
 
-export function formatEventDate(dateStr: string | null): string {
-  if (!dateStr) return '';
-
+function formatSingleDate(dateStr: string): { text: string; isRelative: boolean } {
   const date = new Date(dateStr + 'T00:00:00');
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -19,25 +99,43 @@ export function formatEventDate(dateStr: string | null): string {
   tomorrow.setDate(tomorrow.getDate() + 1);
 
   if (date.getTime() === today.getTime()) {
-    return 'Happening today';
+    return { text: 'today', isRelative: true };
   } else if (date.getTime() === tomorrow.getTime()) {
-    return 'Happening tomorrow';
+    return { text: 'tomorrow', isRelative: true };
   }
 
   const daysUntil = Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-  // More than a week away - use "Mon DD" format
-  if (daysUntil > 7) {
-    return `Happening on ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  // 2-7 days away - show day name
+  if (daysUntil >= 2 && daysUntil <= 7) {
+    return { text: date.toLocaleDateString('en-US', { weekday: 'long' }), isRelative: false };
   }
 
-  // 2-7 days away - show "on {day}"
-  if (daysUntil >= 2) {
-    const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
-    return `Happening on ${dayName}`;
+  // More than a week away or in the past - use "Mon DD" format
+  return { text: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), isRelative: false };
+}
+
+export function formatEventDate(dateStart: string | null, dateEnd?: string | null): string {
+  if (!dateStart) return '';
+
+  const start = formatSingleDate(dateStart);
+
+  // Single-day event
+  if (!dateEnd) {
+    if (start.isRelative) {
+      return `Happening ${start.text}`;
+    }
+    return `Happening on ${start.text}`;
   }
 
-  return `Happening on ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  // Multi-day event
+  const end = formatSingleDate(dateEnd);
+
+  // Format: "Starting today through Sunday" or "Starting Dec 4 through Dec 7"
+  if (start.isRelative) {
+    return `Starting ${start.text} through ${end.text}`;
+  }
+  return `Starting ${start.text} through ${end.text}`;
 }
 
 function formatEmailDate(dateStr: string): string {
@@ -131,7 +229,7 @@ export default function InboxItem({ item }: Props) {
         onLayout={handleLayout}
         scrollEventThrottle={16}
       >
-        <Text style={styles.content}>{item.content}</Text>
+        <LinkedText style={styles.content}>{item.content}</LinkedText>
 
         {/* Source email footer - scrolls with content */}
         <RNView style={styles.footer}>
@@ -158,12 +256,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
     maxHeight: '100%',
+    // Platform-specific shadow styles
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2,
+      },
+    }),
   },
   header: {
     flexDirection: 'row',

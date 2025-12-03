@@ -3,11 +3,12 @@
 export interface InboxItem {
   id: string;
   email_id: string;
-  content: string;        // Raw HTML/text from school email
-  date: string | null;    // Date associated with this item (if any)
-  email_date: string;     // Date of source email (for sorting)
-  from_address: string;   // Sender email/name from email headers
-  subject: string;        // Email subject line
+  content: string;          // Raw HTML/text from school email
+  date_start: string | null; // Start date associated with this item (if any)
+  date_end: string | null;   // End date for multi-day events (if any)
+  email_date: string;       // Date of source email (for sorting)
+  from_address: string;     // Sender email/name from email headers
+  subject: string;          // Email subject line
   created_at: string;
 }
 

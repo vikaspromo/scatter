@@ -381,27 +381,27 @@ def text_similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, a_norm, b_norm).ratio()
 
 
-def find_similar_item(new_content: str, new_date: str | None, new_urls: list[str] = None):
-    """Find an existing current item with ≥85% similarity and matching date, or shared URLs."""
+def find_similar_item(new_content: str, new_date_start: str | None, new_urls: list[str] = None):
+    """Find an existing current item with ≥85% similarity and matching date_start, or shared URLs."""
     if new_urls is None:
         new_urls = []
 
     # Fetch all current items
-    result = supabase.table('items').select('id, content, date, external_urls').eq('is_current', True).execute()
+    result = supabase.table('items').select('id, content, date_start, external_urls').eq('is_current', True).execute()
 
     for existing in result.data:
-        existing_date = existing.get('date')
+        existing_date = existing.get('date_start')
         existing_urls = existing.get('external_urls') or []
 
         # Check for shared URLs first (strong signal)
         shared_urls = set(new_urls) & set(existing_urls)
         if shared_urls:
             # URLs match - check if dates also match (or both null)
-            if new_date == existing_date:
+            if new_date_start == existing_date:
                 return existing['id'], 1.0  # Perfect match via URL
 
         # Fall back to text similarity (dates must match)
-        if new_date != existing_date:
+        if new_date_start != existing_date:
             continue
 
         sim = text_similarity(new_content, existing['content'])
@@ -442,17 +442,20 @@ def supersede_item(old_item_id: str, new_item_id: str):
 def save_item(email_id, item):
     """Save an extracted item to the database, checking for duplicates first."""
     new_content = item['content']
-    new_date = item.get('date')
+    # Support both old 'date' key and new 'date_start' key for backwards compatibility
+    new_date_start = item.get('date_start') or item.get('date')
+    new_date_end = item.get('date_end')
     new_urls = item.get('external_urls', [])
 
     # Check for similar existing items (must have matching date or shared URLs)
-    similar_id, sim_score = find_similar_item(new_content, new_date, new_urls)
+    similar_id, sim_score = find_similar_item(new_content, new_date_start, new_urls)
 
     # Insert new item (always with is_current = TRUE)
     data = {
         'email_id': email_id,
         'content': new_content,
-        'date': item.get('date'),
+        'date_start': new_date_start,
+        'date_end': new_date_end,
         'external_urls': new_urls,
         'is_current': True
     }

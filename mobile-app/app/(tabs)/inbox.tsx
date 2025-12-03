@@ -2,6 +2,7 @@ import { StyleSheet, ActivityIndicator, TouchableOpacity, View as RNView } from 
 import { Text, View } from '@/components/Themed';
 import InboxItem, { formatEventDate } from '@/components/InboxItem';
 import { fetchInboxItems, updateUserItemStatus } from '@/lib/supabase';
+import { getDeviceId } from '@/lib/deviceId';
 import { InboxItem as InboxItemType, TriageDecision } from '@/types';
 import { useState, useCallback, useEffect } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -13,12 +14,20 @@ export default function InboxScreen() {
   const [viewHistory, setViewHistory] = useState<InboxItemType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deviceId, setDeviceId] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
+  // Initialize device ID on mount
+  useEffect(() => {
+    getDeviceId().then(setDeviceId);
+  }, []);
+
   const loadItems = useCallback(async () => {
+    if (!deviceId) return;
+
     try {
       setError(null);
-      const data = await fetchInboxItems();
+      const data = await fetchInboxItems(deviceId);
       setItems(data);
       setCurrentIndex(0);
       setViewHistory([]);
@@ -28,11 +37,13 @@ export default function InboxScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [deviceId]);
 
   useEffect(() => {
-    loadItems();
-  }, [loadItems]);
+    if (deviceId) {
+      loadItems();
+    }
+  }, [deviceId, loadItems]);
 
   const currentItem = items[currentIndex];
   const canUndo = viewHistory.length > 0;
@@ -49,17 +60,13 @@ export default function InboxScreen() {
   };
 
   const handleTriage = async (decision: TriageDecision) => {
-    if (!currentItem) return;
-
-    console.log(`Triage: ${currentItem.id} -> ${decision}`);
-
-    // TODO: Get actual user ID from auth context
-    const userId = 'placeholder-user-id';
+    if (!currentItem || !deviceId) return;
 
     try {
-      await updateUserItemStatus(userId, currentItem.id, decision);
-    } catch (err) {
-      console.error('Failed to update item status:', err);
+      await updateUserItemStatus(deviceId, currentItem.id, decision);
+    } catch (err: any) {
+      console.error('Failed to update item status:', err?.message || err);
+      // Don't block the UI - item is still removed locally
     }
 
     // Save current item to history for undo
@@ -122,10 +129,10 @@ export default function InboxScreen() {
       </RNView>
 
       {/* Event date banner - above card */}
-      {currentItem.date && formatEventDate(currentItem.date) && (
+      {currentItem.date_start && formatEventDate(currentItem.date_start, currentItem.date_end) && (
         <RNView style={styles.eventDateBanner}>
           <FontAwesome name="calendar" size={14} color="#E65100" style={styles.eventDateIcon} />
-          <Text style={styles.eventDateText}>{formatEventDate(currentItem.date)}</Text>
+          <Text style={styles.eventDateText}>{formatEventDate(currentItem.date_start, currentItem.date_end)}</Text>
         </RNView>
       )}
 
