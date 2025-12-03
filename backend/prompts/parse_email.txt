@@ -26,6 +26,20 @@ Examples of items:
 
 If the email has attachments and an item references an attachment (e.g., "see attached permission slip", "fill out the attached form"), include the attachment filename(s) in that item.
 
+## URL Extraction
+
+Extract any external URLs from each item that are actionable or identifying:
+- Signup forms (SignUpGenius, Google Forms, etc.)
+- Payment links
+- Registration links
+- Event-specific pages
+- Resource links (PDFs, videos, etc.)
+
+Do NOT include:
+- Generic school website links (bfrentes.org home page)
+- Email unsubscribe links
+- Social media profile links (unless event-specific)
+
 ## Output Format
 
 Return a JSON object in this exact format:
@@ -38,7 +52,8 @@ If privacy check PASSES:
     {{
       "content": "<exact HTML/text from email for this item>",
       "date": "YYYY-MM-DD or null if no specific date",
-      "attachment_filenames": ["filename.pdf"] or []
+      "attachment_filenames": ["filename.pdf"] or [],
+      "external_urls": ["https://example.com/signup"] or []
     }}
   ]
 }}

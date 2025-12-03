@@ -11,6 +11,7 @@ import base64
 import re
 from datetime import datetime
 from pathlib import Path
+from difflib import SequenceMatcher
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -48,6 +49,9 @@ claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 # Load prompt template
 PROMPT_PATH = Path(__file__).parent / 'prompts' / 'parse_email.txt'
 PROMPT_TEMPLATE = PROMPT_PATH.read_text()
+
+# Deduplication threshold
+SIMILARITY_THRESHOLD = 0.85
 
 
 def get_credentials():
@@ -367,16 +371,101 @@ def parse_email_with_claude(email_data, attachment_names):
     return json.loads(json_str)
 
 
+def text_similarity(a: str, b: str) -> float:
+    """Calculate text similarity ratio between two strings."""
+    if not a or not b:
+        return 0.0
+    # Normalize whitespace for comparison
+    a_norm = " ".join(a.split())
+    b_norm = " ".join(b.split())
+    return SequenceMatcher(None, a_norm, b_norm).ratio()
+
+
+def find_similar_item(new_content: str, new_date: str | None, new_urls: list[str] = None):
+    """Find an existing current item with ≥85% similarity and matching date, or shared URLs."""
+    if new_urls is None:
+        new_urls = []
+
+    # Fetch all current items
+    result = supabase.table('items').select('id, content, date, external_urls').eq('is_current', True).execute()
+
+    for existing in result.data:
+        existing_date = existing.get('date')
+        existing_urls = existing.get('external_urls') or []
+
+        # Check for shared URLs first (strong signal)
+        shared_urls = set(new_urls) & set(existing_urls)
+        if shared_urls:
+            # URLs match - check if dates also match (or both null)
+            if new_date == existing_date:
+                return existing['id'], 1.0  # Perfect match via URL
+
+        # Fall back to text similarity (dates must match)
+        if new_date != existing_date:
+            continue
+
+        sim = text_similarity(new_content, existing['content'])
+        if sim >= SIMILARITY_THRESHOLD:
+            return existing['id'], sim
+
+    return None, 0.0
+
+
+def supersede_item(old_item_id: str, new_item_id: str):
+    """Mark old item as superseded and migrate user statuses to new item."""
+    # Update old item to mark as superseded
+    supabase.table('items').update({
+        'is_current': False,
+        'superseded_by': new_item_id
+    }).eq('id', old_item_id).execute()
+
+    # Migrate user_items from old to new
+    old_user_items = supabase.table('user_items').select(
+        'user_id, status, remind_at'
+    ).eq('item_id', old_item_id).execute()
+
+    for user_item in old_user_items.data:
+        try:
+            supabase.table('user_items').insert({
+                'user_id': user_item['user_id'],
+                'item_id': new_item_id,
+                'status': user_item['status'],
+                'remind_at': user_item['remind_at']
+            }).execute()
+        except Exception as e:
+            if 'duplicate' in str(e).lower() or '23505' in str(e):
+                pass  # User already has status for new item
+            else:
+                print(f"    Warning: Could not migrate user_item: {e}")
+
+
 def save_item(email_id, item):
-    """Save an extracted item to the database and return its ID."""
+    """Save an extracted item to the database, checking for duplicates first."""
+    new_content = item['content']
+    new_date = item.get('date')
+    new_urls = item.get('external_urls', [])
+
+    # Check for similar existing items (must have matching date or shared URLs)
+    similar_id, sim_score = find_similar_item(new_content, new_date, new_urls)
+
+    # Insert new item (always with is_current = TRUE)
     data = {
         'email_id': email_id,
-        'content': item['content'],
-        'date': item.get('date')
+        'content': new_content,
+        'date': item.get('date'),
+        'external_urls': new_urls,
+        'is_current': True
     }
 
     response = supabase.table('items').insert(data).execute()
-    return response.data[0]['id']
+    new_item_id = response.data[0]['id']
+
+    # If we found a similar item, supersede it
+    if similar_id:
+        supersede_item(similar_id, new_item_id)
+        print(f"    ↳ Superseded existing item ({sim_score*100:.0f}% similar)")
+
+    return new_item_id
 
 
 def link_attachments_to_item(item_id, attachment_filenames, all_attachments):

@@ -6,6 +6,8 @@ export interface InboxItem {
   content: string;        // Raw HTML/text from school email
   date: string | null;    // Date associated with this item (if any)
   email_date: string;     // Date of source email (for sorting)
+  from_address: string;   // Sender email/name from email headers
+  subject: string;        // Email subject line
   created_at: string;
 }
 

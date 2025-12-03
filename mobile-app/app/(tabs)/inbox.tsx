@@ -1,28 +1,32 @@
-import { StyleSheet, FlatList, RefreshControl, ActivityIndicator } from 'react-native';
+import { StyleSheet, ActivityIndicator, TouchableOpacity, View as RNView } from 'react-native';
 import { Text, View } from '@/components/Themed';
-import InboxItem from '@/components/InboxItem';
+import InboxItem, { formatEventDate } from '@/components/InboxItem';
 import { fetchInboxItems, updateUserItemStatus } from '@/lib/supabase';
 import { InboxItem as InboxItemType, TriageDecision } from '@/types';
 import { useState, useCallback, useEffect } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function InboxScreen() {
   const [items, setItems] = useState<InboxItemType[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [viewHistory, setViewHistory] = useState<InboxItemType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
 
   const loadItems = useCallback(async () => {
     try {
       setError(null);
       const data = await fetchInboxItems();
       setItems(data);
+      setCurrentIndex(0);
+      setViewHistory([]);
     } catch (err) {
       console.error('Failed to load items:', err);
-      setError('Failed to load items. Pull to retry.');
+      setError('Failed to load items.');
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
 
@@ -30,26 +34,44 @@ export default function InboxScreen() {
     loadItems();
   }, [loadItems]);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadItems();
-  }, [loadItems]);
+  const currentItem = items[currentIndex];
+  const canUndo = viewHistory.length > 0;
 
-  const handleTriage = async (itemId: string, decision: TriageDecision) => {
-    console.log(`Triage: ${itemId} -> ${decision}`);
+  const undo = () => {
+    if (viewHistory.length > 0) {
+      const newHistory = [...viewHistory];
+      const prevItem = newHistory.pop()!;
+      setViewHistory(newHistory);
+      // Restore the item to the list and go back to it
+      setItems([...items.slice(0, currentIndex), prevItem, ...items.slice(currentIndex)]);
+      setCurrentIndex(currentIndex);
+    }
+  };
 
-    // Remove item from inbox view immediately (optimistic update)
-    setItems((prev) => prev.filter((item) => item.id !== itemId));
+  const handleTriage = async (decision: TriageDecision) => {
+    if (!currentItem) return;
+
+    console.log(`Triage: ${currentItem.id} -> ${decision}`);
 
     // TODO: Get actual user ID from auth context
-    // For now, using a placeholder - will need auth setup
     const userId = 'placeholder-user-id';
 
     try {
-      await updateUserItemStatus(userId, itemId, decision);
+      await updateUserItemStatus(userId, currentItem.id, decision);
     } catch (err) {
       console.error('Failed to update item status:', err);
-      // Could restore item on error, but for now just log
+    }
+
+    // Save current item to history for undo
+    setViewHistory([...viewHistory, currentItem]);
+
+    // Remove current item from list
+    const newItems = items.filter((_, idx) => idx !== currentIndex);
+    setItems(newItems);
+
+    // Keep currentIndex the same (will show next item) unless we're at the end
+    if (currentIndex >= newItems.length) {
+      setCurrentIndex(Math.max(0, newItems.length - 1));
     }
   };
 
@@ -86,25 +108,53 @@ export default function InboxScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={items}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <InboxItem
-            item={item}
-            onTriage={(decision) => handleTriage(item.id, decision)}
-          />
-        )}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListHeaderComponent={
-          <Text style={styles.headerText}>
-            {items.length} item{items.length !== 1 ? 's' : ''} to review
-          </Text>
-        }
-      />
+      {/* Header */}
+      <RNView style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity
+          style={[styles.navButton, !canUndo && styles.navButtonDisabled]}
+          onPress={undo}
+          disabled={!canUndo}
+        >
+          <FontAwesome name="undo" size={20} color={canUndo ? '#333' : '#ccc'} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Inbox</Text>
+        <RNView style={styles.navButton} />
+      </RNView>
+
+      {/* Event date banner - above card */}
+      {currentItem.date && formatEventDate(currentItem.date) && (
+        <RNView style={styles.eventDateBanner}>
+          <FontAwesome name="calendar" size={14} color="#E65100" style={styles.eventDateIcon} />
+          <Text style={styles.eventDateText}>{formatEventDate(currentItem.date)}</Text>
+        </RNView>
+      )}
+
+      {/* Card */}
+      <RNView style={styles.cardContainer}>
+        <InboxItem item={currentItem} />
+      </RNView>
+
+      {/* Action Bar */}
+      <RNView style={[styles.actionBar, { paddingBottom: insets.bottom + 16 }]}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => handleTriage('done')}
+        >
+          <RNView style={styles.actionIconContainer}>
+            <FontAwesome name="times" size={20} color="#999" />
+          </RNView>
+          <Text style={styles.actionLabel}>Done</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => handleTriage('remind')}
+        >
+          <RNView style={[styles.actionIconContainer, styles.keepIconContainer]}>
+            <FontAwesome name="check" size={20} color="#fff" />
+          </RNView>
+          <Text style={styles.actionLabel}>Remind</Text>
+        </TouchableOpacity>
+      </RNView>
     </View>
   );
 }
@@ -114,14 +164,80 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  listContent: {
-    paddingVertical: 8,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
-  headerText: {
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  navButton: {
+    padding: 8,
+  },
+  navButtonDisabled: {
+    opacity: 0.3,
+  },
+  eventDateBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 8,
+  },
+  eventDateIcon: {
+    marginRight: 8,
+  },
+  eventDateText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#E65100',
+  },
+  cardContainer: {
+    flex: 1,
+    justifyContent: 'flex-start',
+    paddingVertical: 16,
+  },
+  actionBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingTop: 16,
+    paddingHorizontal: 32,
+  },
+  actionButton: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  actionIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    borderWidth: 1.5,
+    borderColor: '#999',
+  },
+  keepIconContainer: {
+    backgroundColor: '#007AFF',
+    borderWidth: 0,
+  },
+  actionLabel: {
     fontSize: 13,
     color: '#666',
-    textAlign: 'center',
-    paddingVertical: 8,
+    fontWeight: '500',
   },
   emptyContainer: {
     flex: 1,

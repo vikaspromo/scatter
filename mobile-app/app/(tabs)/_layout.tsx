@@ -25,14 +25,14 @@ export default function TabLayout() {
         name="inbox"
         options={{
           title: 'Inbox',
+          headerShown: false,
           tabBarIcon: ({ color }) => <TabBarIcon name="inbox" color={color} />,
-          tabBarBadge: 7, // TODO: Dynamic count from untriaged items
         }}
       />
       <Tabs.Screen
         name="later"
         options={{
-          title: 'Saved',
+          title: 'Reminders',
           tabBarIcon: ({ color }) => <TabBarIcon name="bookmark" color={color} />,
         }}
       />

@@ -1,15 +1,15 @@
-import React from 'react';
-import { StyleSheet, TouchableOpacity, View as RNView } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, View as RNView, ScrollView, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { InboxItem as InboxItemType, TriageDecision } from '@/types';
+import { InboxItem as InboxItemType } from '@/types';
+import { fontSize, fontWeight, lineHeight, colors } from '@/constants/Typography';
 
 interface Props {
   item: InboxItemType;
-  onTriage: (decision: TriageDecision) => void;
 }
 
-function formatDate(dateStr: string | null): string {
+export function formatEventDate(dateStr: string | null): string {
   if (!dateStr) return '';
 
   const date = new Date(dateStr + 'T00:00:00');
@@ -19,17 +19,25 @@ function formatDate(dateStr: string | null): string {
   tomorrow.setDate(tomorrow.getDate() + 1);
 
   if (date.getTime() === today.getTime()) {
-    return 'Today';
+    return 'Happening today';
   } else if (date.getTime() === tomorrow.getTime()) {
-    return 'Tomorrow';
+    return 'Happening tomorrow';
   }
 
   const daysUntil = Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  if (daysUntil > 0 && daysUntil <= 7) {
-    return `In ${daysUntil} days`;
+
+  // More than a week away - use "Mon DD" format
+  if (daysUntil > 7) {
+    return `Happening on ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
   }
 
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  // 2-7 days away - show "on {day}"
+  if (daysUntil >= 2) {
+    const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+    return `Happening on ${dayName}`;
+  }
+
+  return `Happening on ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
 }
 
 function formatEmailDate(dateStr: string): string {
@@ -37,143 +45,163 @@ function formatEmailDate(dateStr: string): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function InboxItem({ item, onTriage }: Props) {
-  const itemDateDisplay = formatDate(item.date);
+function parseSenderName(fromAddress: string): string {
+  // Handle "Name <email>" format
+  const match = fromAddress.match(/^"?([^"<]+)"?\s*<.*>$/);
+  let name = match ? match[1].trim() : null;
+
+  // Handle plain email - extract part before @
+  if (!name) {
+    const emailMatch = fromAddress.match(/^([^@]+)@/);
+    name = emailMatch ? emailMatch[1] : fromAddress;
+  }
+
+  // Strip (DCPS) specifically
+  name = name.replace(/\s*\(DCPS\)\s*/gi, ' ').trim();
+
+  // Reformat "Last, First" to "First Last"
+  const lastFirstMatch = name.match(/^([^,]+),\s*(.+)$/);
+  if (lastFirstMatch) {
+    name = `${lastFirstMatch[2]} ${lastFirstMatch[1]}`;
+  }
+
+  return name;
+}
+
+function parseEmailAddress(fromAddress: string): string {
+  // Extract email from "Name <email>" format
+  const match = fromAddress.match(/<([^>]+)>/);
+  if (match) {
+    return match[1];
+  }
+  // If no angle brackets, assume it's just the email
+  return fromAddress;
+}
+
+export default function InboxItem({ item }: Props) {
   const emailDateDisplay = formatEmailDate(item.email_date);
+  const senderName = parseSenderName(item.from_address);
+  const emailAddress = parseEmailAddress(item.from_address);
+
+  const [showScrollHint, setShowScrollHint] = useState(false);
+  const [contentHeight, setContentHeight] = useState(0);
+  const [scrollViewHeight, setScrollViewHeight] = useState(0);
+
+  const isScrollable = contentHeight > scrollViewHeight;
+  const shouldShowHint = isScrollable && showScrollHint;
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset } = event.nativeEvent;
+    // Hide hint once user scrolls down a bit
+    if (contentOffset.y > 10) {
+      setShowScrollHint(false);
+    }
+  };
+
+  const handleContentSizeChange = (_width: number, height: number) => {
+    setContentHeight(height);
+    // Show hint when we know content is larger than container
+    if (height > scrollViewHeight && scrollViewHeight > 0) {
+      setShowScrollHint(true);
+    }
+  };
+
+  const handleLayout = (event: any) => {
+    const { height } = event.nativeEvent.layout;
+    setScrollViewHeight(height);
+    // Show hint when we know content is larger than container
+    if (contentHeight > height && contentHeight > 0) {
+      setShowScrollHint(true);
+    }
+  };
 
   return (
     <View style={styles.container}>
-      {/* Header with email date and optional item date */}
+      {/* Email metadata */}
       <RNView style={styles.header}>
-        <RNView style={styles.iconContainer}>
-          <FontAwesome name="envelope-o" size={16} color="#007AFF" />
-        </RNView>
-        <RNView style={styles.metadata}>
-          <RNView style={styles.metaBadge}>
-            <Text style={styles.metaText}>{emailDateDisplay}</Text>
-          </RNView>
-          {itemDateDisplay && (
-            <RNView style={[styles.metaBadge, styles.dateBadge]}>
-              <FontAwesome name="calendar" size={10} color="#E65100" style={styles.dateIcon} />
-              <Text style={[styles.metaText, styles.dateText]}>{itemDateDisplay}</Text>
-            </RNView>
-          )}
-        </RNView>
+        <Text style={styles.metaText}>From {senderName}</Text>
       </RNView>
 
       {/* Content - school's exact message */}
-      <Text style={styles.content}>{item.content}</Text>
+      <ScrollView
+        style={styles.contentScroll}
+        showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        onContentSizeChange={handleContentSizeChange}
+        onLayout={handleLayout}
+        scrollEventThrottle={16}
+      >
+        <Text style={styles.content}>{item.content}</Text>
 
-      {/* Triage buttons */}
-      <RNView style={styles.buttons}>
-        <TouchableOpacity
-          style={[styles.button, styles.doneButton]}
-          onPress={() => onTriage('done')}
-        >
-          <FontAwesome name="check" size={14} color="#666" style={styles.buttonIcon} />
-          <Text style={styles.doneText}>Done</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.button, styles.remindMeButton]}
-          onPress={() => onTriage('remind')}
-        >
-          <FontAwesome name="bell" size={14} color="#fff" style={styles.buttonIcon} />
-          <Text style={styles.remindMeText}>Save & Remind</Text>
-        </TouchableOpacity>
-      </RNView>
+        {/* Source email footer - scrolls with content */}
+        <RNView style={styles.footer}>
+          <Text style={styles.footerText}>{emailAddress}</Text>
+          <Text style={styles.footerText}>Subject: "{item.subject}"</Text>
+          <Text style={styles.footerText}>Sent {emailDateDisplay}</Text>
+        </RNView>
+      </ScrollView>
+
+      {/* Scroll hint - shows when content overflows */}
+      {shouldShowHint && (
+        <RNView style={styles.scrollHint}>
+          <FontAwesome name="chevron-down" size={12} color="#999" />
+          <Text style={styles.scrollHintText}>Scroll for more</Text>
+        </RNView>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBackground,
     borderRadius: 12,
     padding: 16,
     marginHorizontal: 16,
-    marginVertical: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 2,
+    maxHeight: '100%',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
   },
-  iconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: '#007AFF15',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  metadata: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
+  metaText: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.bold,
+    color: colors.textSecondary,
     flex: 1,
   },
-  metaBadge: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  metaText: {
-    fontSize: 12,
-    color: '#666',
-  },
-  dateBadge: {
-    backgroundColor: '#FFF3E0',
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dateIcon: {
-    marginRight: 4,
-  },
-  dateText: {
-    color: '#E65100',
+  contentScroll: {
+    flexGrow: 0,
   },
   content: {
-    fontSize: 15,
-    color: '#333',
-    lineHeight: 22,
+    fontSize: fontSize.base,
+    color: colors.textPrimary,
+    lineHeight: lineHeight.base,
   },
-  buttons: {
-    flexDirection: 'row',
-    marginTop: 16,
-    gap: 8,
+  footer: {
+    marginTop: 32,
+    alignItems: 'flex-end',
   },
-  button: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  buttonIcon: {
-    marginRight: 4,
-  },
-  doneButton: {
-    backgroundColor: '#f5f5f5',
-  },
-  doneText: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
-  },
-  remindMeButton: {
-    backgroundColor: '#007AFF',
-  },
-  remindMeText: {
+  footerText: {
     fontSize: 13,
-    color: '#fff',
-    fontWeight: '600',
+    fontStyle: 'italic',
+    color: colors.textSecondary,
+    lineHeight: 18,
+    textAlign: 'right',
+  },
+  scrollHint: {
+    alignItems: 'center',
+    paddingTop: 12,
+    gap: 4,
+  },
+  scrollHintText: {
+    fontSize: 12,
+    color: '#999',
   },
 });
