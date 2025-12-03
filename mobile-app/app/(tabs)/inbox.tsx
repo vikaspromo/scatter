@@ -130,9 +130,11 @@ export default function InboxScreen() {
 
       {/* Event date banner - above card */}
       {currentItem.date_start && formatEventDate(currentItem.date_start, currentItem.date_end) && (
-        <RNView style={styles.eventDateBanner}>
-          <FontAwesome name="calendar" size={14} color="#E65100" style={styles.eventDateIcon} />
-          <Text style={styles.eventDateText}>{formatEventDate(currentItem.date_start, currentItem.date_end)}</Text>
+        <RNView style={styles.eventDateBannerContainer}>
+          <RNView style={styles.eventDateBanner}>
+            <FontAwesome name="calendar" size={14} color="#FFFFFF" style={styles.eventDateIcon} />
+            <Text style={styles.eventDateText}>{formatEventDate(currentItem.date_start, currentItem.date_end)}</Text>
+          </RNView>
         </RNView>
       )}
 
@@ -192,14 +194,17 @@ const styles = StyleSheet.create({
   navButtonDisabled: {
     opacity: 0.3,
   },
+  eventDateBannerContainer: {
+    paddingHorizontal: 16,
+    marginTop: 16,
+  },
   eventDateBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF3E0',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginHorizontal: 16,
-    marginTop: 16,
+    alignSelf: 'flex-start',
+    backgroundColor: '#FF6D00',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 8,
   },
   eventDateIcon: {
@@ -208,7 +213,7 @@ const styles = StyleSheet.create({
   eventDateText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#E65100',
+    color: '#FFFFFF',
   },
   cardContainer: {
     flex: 1,

@@ -7,30 +7,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-
-function formatSectionHeader(dateStr: string | null): string {
-  if (!dateStr) return 'General reminders';
-  const date = new Date(dateStr + 'T00:00:00');
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  if (date.getTime() === today.getTime()) {
-    return 'Today';
-  } else if (date.getTime() === tomorrow.getTime()) {
-    return 'Tomorrow';
-  }
-
-  const daysUntil = Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-  if (daysUntil >= 2 && daysUntil <= 7) {
-    const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
-    return `This ${dayName}`;
-  }
-
-  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-}
+import { formatSectionHeader } from '@/lib/dateUtils';
 
 interface Section {
   title: string;
@@ -86,11 +63,13 @@ function ReminderItemCard({ item, onPress }: ReminderItemProps) {
 
 function SectionHeader({ title, hasDate }: { title: string; hasDate: boolean }) {
   return (
-    <RNView style={styles.sectionHeader}>
-      {hasDate && (
-        <FontAwesome name="calendar" size={14} color="#E65100" style={styles.sectionIcon} />
-      )}
-      <Text style={[styles.sectionTitle, !hasDate && styles.sectionTitleNoDate]}>{title}</Text>
+    <RNView style={styles.sectionHeaderContainer}>
+      <RNView style={[styles.sectionHeader, hasDate && styles.sectionHeaderWithDate]}>
+        {hasDate && (
+          <FontAwesome name="calendar" size={14} color="#FFFFFF" style={styles.sectionIcon} />
+        )}
+        <Text style={[styles.sectionTitle, hasDate && styles.sectionTitleWithDate]}>{title}</Text>
+      </RNView>
     </RNView>
   );
 }
@@ -202,24 +181,32 @@ const styles = StyleSheet.create({
   listContent: {
     paddingVertical: 12,
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  sectionHeaderContainer: {
     paddingHorizontal: 16,
     paddingTop: 20,
     paddingBottom: 8,
-    backgroundColor: '#f5f5f5',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  sectionHeaderWithDate: {
+    backgroundColor: '#FF6D00',
   },
   sectionIcon: {
     marginRight: 8,
   },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#E65100',
-  },
-  sectionTitleNoDate: {
     color: '#666',
+  },
+  sectionTitleWithDate: {
+    color: '#FFFFFF',
   },
   itemContainer: {
     flexDirection: 'row',

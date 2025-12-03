@@ -91,52 +91,8 @@ interface Props {
   item: InboxItemType;
 }
 
-function formatSingleDate(dateStr: string): { text: string; isRelative: boolean } {
-  const date = new Date(dateStr + 'T00:00:00');
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  if (date.getTime() === today.getTime()) {
-    return { text: 'today', isRelative: true };
-  } else if (date.getTime() === tomorrow.getTime()) {
-    return { text: 'tomorrow', isRelative: true };
-  }
-
-  const daysUntil = Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-  // 2-7 days away - show day name
-  if (daysUntil >= 2 && daysUntil <= 7) {
-    return { text: date.toLocaleDateString('en-US', { weekday: 'long' }), isRelative: false };
-  }
-
-  // More than a week away or in the past - use "Mon DD" format
-  return { text: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), isRelative: false };
-}
-
-export function formatEventDate(dateStart: string | null, dateEnd?: string | null): string {
-  if (!dateStart) return '';
-
-  const start = formatSingleDate(dateStart);
-
-  // Single-day event
-  if (!dateEnd) {
-    if (start.isRelative) {
-      return `Happening ${start.text}`;
-    }
-    return `Happening on ${start.text}`;
-  }
-
-  // Multi-day event
-  const end = formatSingleDate(dateEnd);
-
-  // Format: "Starting today through Sunday" or "Starting Dec 4 through Dec 7"
-  if (start.isRelative) {
-    return `Starting ${start.text} through ${end.text}`;
-  }
-  return `Starting ${start.text} through ${end.text}`;
-}
+// Re-export formatEventDate from dateUtils for backwards compatibility
+export { formatEventDate } from '@/lib/dateUtils';
 
 function formatEmailDate(dateStr: string): string {
   const date = new Date(dateStr);
