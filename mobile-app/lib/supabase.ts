@@ -74,9 +74,13 @@ export async function fetchInboxItems(userId: string): Promise<(DbItem & { email
     throw error;
   }
 
-  // Flatten, filter out triaged items, and sort by email date (most recent first)
+  // Get today's date in YYYY-MM-DD format for comparison
+  const today = new Date().toISOString().split('T')[0];
+
+  // Flatten, filter out triaged items and expired items, and sort by email date (most recent first)
   const items = (data || [])
     .filter((item: any) => !triagedIds.includes(item.id))
+    .filter((item: any) => !item.date_end || item.date_end >= today) // Exclude items with past end dates
     .map((item: any) => ({
       id: item.id,
       email_id: item.email_id,

@@ -6,6 +6,7 @@ import { InboxItem as InboxItemType } from '@/types';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 
 function formatSectionHeader(dateStr: string | null): string {
   if (!dateStr) return 'General reminders';
@@ -124,6 +125,15 @@ export default function RemindersScreen() {
       loadItems();
     }
   }, [deviceId, loadItems]);
+
+  // Reload items when tab becomes focused (e.g., after marking an item as "Remind")
+  useFocusEffect(
+    useCallback(() => {
+      if (deviceId) {
+        loadItems();
+      }
+    }, [deviceId, loadItems])
+  );
 
   // Group items by date
   const sections = useMemo(() => groupByDate(items), [items]);

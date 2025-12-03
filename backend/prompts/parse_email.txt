@@ -43,13 +43,14 @@ Do NOT include:
 ## Date Extraction
 
 For each item, extract the relevant date(s):
-- **date_start**: The start date (or only date) in YYYY-MM-DD format, or null if no specific date
-- **date_end**: For multi-day events, the end date in YYYY-MM-DD format, or null for single-day events
+- **date_start**: The start date in YYYY-MM-DD format, or null if no specific date
+- **date_end**: The end date in YYYY-MM-DD format. For single-day events, set this to the SAME value as date_start. Only use null if there is no specific date.
 
 Examples:
-- "Friday, December 6" → `"date_start": "2024-12-06", "date_end": null`
+- "Friday, December 6" → `"date_start": "2024-12-06", "date_end": "2024-12-06"` (same date for single-day event)
 - "December 4 to December 7" → `"date_start": "2024-12-04", "date_end": "2024-12-07"`
 - "December 4-7" → `"date_start": "2024-12-04", "date_end": "2024-12-07"`
+- No specific date mentioned → `"date_start": null, "date_end": null`
 
 ## Output Format
 
@@ -63,7 +64,7 @@ If privacy check PASSES:
     {{
       "content": "<exact HTML/text from email for this item>",
       "date_start": "YYYY-MM-DD or null if no specific date",
-      "date_end": "YYYY-MM-DD or null if single-day event",
+      "date_end": "YYYY-MM-DD (same as date_start for single-day events, null only if no date)",
       "attachment_filenames": ["filename.pdf"] or [],
       "external_urls": ["https://example.com/signup"] or []
     }}
