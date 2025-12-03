@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   StyleSheet,
   View as RNView,
@@ -13,12 +13,17 @@ import { Swipeable } from 'react-native-gesture-handler';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { InboxItem as InboxItemType } from '@/types';
 import { fontSize, fontWeight, lineHeight } from '@/constants/Typography';
-import { formatEventDate } from '@/lib/dateUtils';
+import { formatEventDate, formatRelativeTime } from '@/lib/dateUtils';
+
+// Approximate character limit for collapsed text (~3 lines)
+const COLLAPSED_MAX_CHARS = 180;
 
 interface ActionableItemCardProps {
   item: InboxItemType;
   onArchive: () => void;
-  onRemind: () => void;
+  onBookmarkToggle: (isBookmarked: boolean) => void;
+  onSwipeBookmark: () => void;  // For swipe gesture (one-way, removes card)
+  initialBookmarked?: boolean;
   showDateBadge?: boolean;
 }
 
@@ -99,18 +104,16 @@ function parseSenderName(fromAddress: string): string {
   return name;
 }
 
-function formatEmailDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
 export default function ActionableItemCard({
   item,
   onArchive,
-  onRemind,
+  onBookmarkToggle,
+  onSwipeBookmark,
+  initialBookmarked = false,
   showDateBadge = true,
 }: ActionableItemCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState(initialBookmarked);
   const swipeableRef = useRef<Swipeable>(null);
 
   // Theme colors
@@ -123,17 +126,42 @@ export default function ActionableItemCard({
   const eventOrange = useThemeColor({}, 'eventOrange');
 
   const senderName = parseSenderName(item.from_address);
-  const emailDate = formatEmailDate(item.email_date);
+  const relativeTime = formatRelativeTime(item.email_date);
   const eventDate = formatEventDate(item.date_start, item.date_end);
+
+  // Prepare collapsed content: normalize whitespace, truncate, determine if "more" needed
+  const collapsedContent = useMemo(() => {
+    // Replace newlines and multiple spaces with single space
+    const normalized = item.content.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+
+    if (normalized.length <= COLLAPSED_MAX_CHARS) {
+      return { text: normalized, needsMore: false };
+    }
+
+    // Find word boundary to truncate at
+    let truncateAt = COLLAPSED_MAX_CHARS;
+    while (truncateAt > 0 && normalized[truncateAt] !== ' ') {
+      truncateAt--;
+    }
+    if (truncateAt === 0) truncateAt = COLLAPSED_MAX_CHARS;
+
+    return { text: normalized.substring(0, truncateAt).trim(), needsMore: true };
+  }, [item.content]);
 
   const handleArchive = () => {
     swipeableRef.current?.close();
     onArchive();
   };
 
-  const handleRemind = () => {
+  const handleSwipeBookmark = () => {
     swipeableRef.current?.close();
-    onRemind();
+    onSwipeBookmark();
+  };
+
+  const handleBookmarkToggle = () => {
+    const newState = !isBookmarked;
+    setIsBookmarked(newState);
+    onBookmarkToggle(newState);
   };
 
   const renderLeftActions = (
@@ -148,8 +176,8 @@ export default function ActionableItemCard({
     return (
       <RNView style={[styles.leftAction, { backgroundColor: tint }]}>
         <Animated.View style={[styles.actionContent, { transform: [{ translateX: trans }] }]}>
-          <FontAwesome name="bell" size={20} color="#fff" />
-          <Text style={styles.actionText}>Remind</Text>
+          <FontAwesome name="bookmark" size={20} color="#fff" />
+          <Text style={styles.actionText}>Bookmark</Text>
         </Animated.View>
       </RNView>
     );
@@ -177,11 +205,11 @@ export default function ActionableItemCard({
   return (
     <Swipeable
       ref={swipeableRef}
-      renderLeftActions={renderLeftActions}
+      renderLeftActions={isBookmarked ? undefined : renderLeftActions}
       renderRightActions={renderRightActions}
       onSwipeableOpen={(direction) => {
-        if (direction === 'left') {
-          handleRemind();
+        if (direction === 'left' && !isBookmarked) {
+          handleSwipeBookmark();
         } else if (direction === 'right') {
           handleArchive();
         }
@@ -208,25 +236,25 @@ export default function ActionableItemCard({
           )}
         </RNView>
 
-        {/* Email source line */}
-        <Text style={[styles.emailSource, { color: textSecondary }]} numberOfLines={2}>
-          Via email "{item.subject}" sent on {emailDate}
-        </Text>
-
         {/* Content */}
         {expanded ? (
           <LinkedText style={[styles.contentExpanded, { color: textPrimary }]} linkColor={tint}>{item.content}</LinkedText>
         ) : (
-          <RNView>
-            <Text style={[styles.contentCollapsed, { color: textPrimary }]} numberOfLines={3}>
-              {item.content}
-            </Text>
-            <RNView style={styles.expandHint}>
-              <FontAwesome name="chevron-down" size={12} color={textMuted} />
-              <Text style={[styles.expandHintText, { color: textMuted }]}>Tap to see more</Text>
-            </RNView>
-          </RNView>
+          <Text style={[styles.contentCollapsed, { color: textPrimary }]}>
+            {collapsedContent.text}
+            {collapsedContent.needsMore && (
+              <>
+                <Text>... </Text>
+                <Text style={{ color: textMuted }}>more</Text>
+              </>
+            )}
+          </Text>
         )}
+
+        {/* Email source footer */}
+        <Text style={[styles.emailSource, { color: textMuted }]} numberOfLines={1}>
+          "{item.subject}" • {relativeTime}
+        </Text>
 
         {/* Action buttons */}
         <RNView style={[styles.bottomActions, { borderTopColor: border }]}>
@@ -244,11 +272,10 @@ export default function ActionableItemCard({
             style={[styles.bottomActionButton, styles.remindActionButton]}
             onPress={(e) => {
               e.stopPropagation();
-              onRemind();
+              handleBookmarkToggle();
             }}
           >
-            <FontAwesome name="bell" size={16} color={tint} />
-            <Text style={[styles.bottomActionText, { color: tint }]}>Add to reminders</Text>
+            <FontAwesome name={isBookmarked ? "bookmark" : "bookmark-o"} size={18} color={tint} />
           </TouchableOpacity>
         </RNView>
       </TouchableOpacity>
@@ -316,18 +343,7 @@ const styles = StyleSheet.create({
   },
   emailSource: {
     fontSize: 13,
-    fontStyle: 'italic',
-    marginBottom: 8,
-  },
-  expandHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     marginTop: 8,
-    gap: 4,
-  },
-  expandHintText: {
-    fontSize: 12,
   },
   bottomActions: {
     flexDirection: 'row',

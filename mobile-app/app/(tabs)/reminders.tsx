@@ -1,5 +1,5 @@
 import { StyleSheet, SectionList, ActivityIndicator, View as RNView } from 'react-native';
-import { Text, View } from '@/components/Themed';
+import { Text, View, useThemeColor } from '@/components/Themed';
 import { fetchRemindedItems, updateUserItemStatus } from '@/lib/supabase';
 import { getDeviceId } from '@/lib/deviceId';
 import { InboxItem as InboxItemType } from '@/types';
@@ -13,44 +13,122 @@ import ActionableItemCard from '@/components/ActionableItemCard';
 interface Section {
   title: string;
   date: string | null;
+  isMajorHeader?: boolean; // For "Coming up" and "Additional bookmarks" headers
   data: InboxItemType[];
 }
 
-function groupByDate(items: InboxItemType[]): Section[] {
-  const groups: { [key: string]: InboxItemType[] } = {};
+function groupBookmarks(items: InboxItemType[]): Section[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const sixDaysFromNow = new Date(today);
+  sixDaysFromNow.setDate(sixDaysFromNow.getDate() + 6);
+  sixDaysFromNow.setHours(23, 59, 59, 999);
+
+  // Split items into "coming up" (with dates in next 7 days) and "additional" (rest)
+  const comingUpItems: InboxItemType[] = [];
+  const additionalItems: InboxItemType[] = [];
 
   items.forEach(item => {
-    const key = item.date_start || '__no_date__';
-    if (!groups[key]) {
-      groups[key] = [];
+    if (item.date_start) {
+      const itemDate = new Date(item.date_start);
+      if (itemDate >= today && itemDate <= sixDaysFromNow) {
+        comingUpItems.push(item);
+      } else {
+        additionalItems.push(item);
+      }
+    } else {
+      additionalItems.push(item);
     }
-    groups[key].push(item);
   });
 
-  const sections: Section[] = Object.entries(groups).map(([key, data]) => ({
-    title: formatSectionHeader(key === '__no_date__' ? null : key),
-    date: key === '__no_date__' ? null : key,
-    data,
-  }));
+  const sections: Section[] = [];
 
-  sections.sort((a, b) => {
-    if (a.date === null && b.date === null) return 0;
-    if (a.date === null) return 1;
-    if (b.date === null) return -1;
-    return a.date.localeCompare(b.date);
-  });
+  // "Coming up" section with date sub-groups
+  if (comingUpItems.length > 0) {
+    // Add major header
+    sections.push({
+      title: 'Coming up',
+      date: null,
+      isMajorHeader: true,
+      data: [],
+    });
+
+    // Group by date
+    const dateGroups: { [key: string]: InboxItemType[] } = {};
+    comingUpItems.forEach(item => {
+      const key = item.date_start!;
+      if (!dateGroups[key]) {
+        dateGroups[key] = [];
+      }
+      dateGroups[key].push(item);
+    });
+
+    // Sort date groups chronologically and add as sections
+    Object.entries(dateGroups)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([dateKey, data]) => {
+        sections.push({
+          title: formatSectionHeader(dateKey),
+          date: dateKey,
+          data,
+        });
+      });
+  }
+
+  // "Additional bookmarks" section
+  if (additionalItems.length > 0) {
+    // Sort by email_date descending (newest first)
+    additionalItems.sort((a, b) =>
+      new Date(b.email_date).getTime() - new Date(a.email_date).getTime()
+    );
+
+    sections.push({
+      title: 'Additional bookmarks',
+      date: null,
+      isMajorHeader: true,
+      data: additionalItems,
+    });
+  }
 
   return sections;
 }
 
-function SectionHeader({ title, hasDate }: { title: string; hasDate: boolean }) {
+function SectionHeader({
+  title,
+  hasDate,
+  isMajorHeader,
+  eventOrange,
+  textSecondary,
+}: {
+  title: string;
+  hasDate: boolean;
+  isMajorHeader?: boolean;
+  eventOrange: string;
+  textSecondary: string;
+}) {
+  // Major headers ("Coming up", "Additional bookmarks") are plain text
+  if (isMajorHeader) {
+    return (
+      <RNView style={styles.majorHeaderContainer}>
+        <Text style={[styles.majorHeaderTitle, { color: textSecondary }]}>{title}</Text>
+      </RNView>
+    );
+  }
+
   return (
     <RNView style={styles.sectionHeaderContainer}>
-      <RNView style={[styles.sectionHeader, hasDate && styles.sectionHeaderWithDate]}>
+      <RNView style={[
+        styles.sectionHeader,
+        hasDate && [styles.sectionHeaderWithDate, { backgroundColor: eventOrange }]
+      ]}>
         {hasDate && (
           <FontAwesome name="calendar" size={14} color="#FFFFFF" style={styles.sectionIcon} />
         )}
-        <Text style={[styles.sectionTitle, hasDate && styles.sectionTitleWithDate]}>{title}</Text>
+        <Text style={[
+          styles.sectionTitle,
+          { color: hasDate ? '#FFFFFF' : textSecondary }
+        ]}>{title}</Text>
       </RNView>
     </RNView>
   );
@@ -61,6 +139,14 @@ export default function RemindersScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deviceId, setDeviceId] = useState<string | null>(null);
+
+  // Theme colors
+  const background = useThemeColor({}, 'background');
+  const textSecondary = useThemeColor({}, 'textSecondary');
+  const textMuted = useThemeColor({}, 'textMuted');
+  const tint = useThemeColor({}, 'tint');
+  const errorColor = useThemeColor({}, 'error');
+  const eventOrange = useThemeColor({}, 'eventOrange');
 
   useEffect(() => {
     getDeviceId().then(setDeviceId);
@@ -95,7 +181,7 @@ export default function RemindersScreen() {
     }, [deviceId, loadItems])
   );
 
-  const sections = useMemo(() => groupByDate(items), [items]);
+  const sections = useMemo(() => groupBookmarks(items), [items]);
 
   const handleArchive = async (itemId: string) => {
     if (!deviceId) return;
@@ -110,44 +196,64 @@ export default function RemindersScreen() {
     }
   };
 
-  const handleRemind = (itemId: string) => {
-    // Item is already in reminders, tapping remind just keeps it there
-    // No action needed - the item stays in the list
+  // For swipe gesture - removes card from list (un-bookmark)
+  const handleSwipeBookmark = async (itemId: string) => {
+    if (!deviceId) return;
+
+    // Optimistically remove from list
+    setItems(items.filter(item => item.id !== itemId));
+
+    try {
+      await updateUserItemStatus(deviceId, itemId, 'inbox');
+    } catch (err) {
+      console.error('Failed to remove bookmark:', err);
+    }
+  };
+
+  // For toggle button - keeps card in place
+  const handleBookmarkToggle = async (itemId: string, isBookmarked: boolean) => {
+    if (!deviceId) return;
+
+    try {
+      await updateUserItemStatus(deviceId, itemId, isBookmarked ? 'remind' : 'inbox');
+    } catch (err) {
+      console.error('Failed to toggle bookmark:', err);
+    }
   };
 
   if (loading) {
     return (
-      <View style={styles.emptyContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.emptySubtitle}>Loading reminders...</Text>
+      <View style={[styles.emptyContainer, { backgroundColor: background }]}>
+        <ActivityIndicator size="large" color={tint} />
+        <Text style={[styles.emptySubtitle, { color: textMuted }]}>Loading bookmarks...</Text>
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.emptyContainer}>
-        <FontAwesome name="exclamation-circle" size={64} color="#FF3B30" />
-        <Text style={styles.emptyTitle}>Error</Text>
-        <Text style={styles.emptySubtitle}>{error}</Text>
+      <View style={[styles.emptyContainer, { backgroundColor: background }]}>
+        <FontAwesome name="exclamation-circle" size={64} color={errorColor} />
+        <Text style={[styles.emptyTitle, { color: textMuted }]}>Error</Text>
+        <Text style={[styles.emptySubtitle, { color: textMuted }]}>{error}</Text>
       </View>
     );
   }
 
   if (items.length === 0) {
     return (
-      <View style={styles.emptyContainer}>
-        <FontAwesome name="bell-o" size={64} color="#ccc" />
-        <Text style={styles.emptyTitle}>No reminders</Text>
-        <Text style={styles.emptySubtitle}>
-          Items you mark "Remind" will appear here
+      <View style={[styles.emptyContainer, { backgroundColor: background }]}>
+        <FontAwesome name="bookmark-o" size={64} color={textMuted} />
+        <Text style={[styles.emptyTitle, { color: textMuted }]}>No bookmarks</Text>
+        <Text style={[styles.emptySubtitle, { color: textMuted }]}>
+          Additional bookmarks will appear here
         </Text>
       </View>
     );
   }
 
   return (
-    <GestureHandlerRootView style={styles.container}>
+    <GestureHandlerRootView style={[styles.container, { backgroundColor: background }]}>
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.id}
@@ -155,12 +261,20 @@ export default function RemindersScreen() {
           <ActionableItemCard
             item={item}
             onArchive={() => handleArchive(item.id)}
-            onRemind={() => handleRemind(item.id)}
+            onBookmarkToggle={(isBookmarked) => handleBookmarkToggle(item.id, isBookmarked)}
+            onSwipeBookmark={() => handleSwipeBookmark(item.id)}
+            initialBookmarked={true}
             showDateBadge={false}
           />
         )}
         renderSectionHeader={({ section }) => (
-          <SectionHeader title={section.title} hasDate={section.date !== null} />
+          <SectionHeader
+            title={section.title}
+            hasDate={section.date !== null}
+            isMajorHeader={section.isMajorHeader}
+            eventOrange={eventOrange}
+            textSecondary={textSecondary}
+          />
         )}
         contentContainerStyle={styles.listContent}
         stickySectionHeadersEnabled={false}
@@ -172,7 +286,6 @@ export default function RemindersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   listContent: {
     paddingVertical: 8,
@@ -190,36 +303,36 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
   },
-  sectionHeaderWithDate: {
-    backgroundColor: '#FF6D00',
-  },
+  sectionHeaderWithDate: {},
   sectionIcon: {
     marginRight: 8,
   },
   sectionTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#666',
   },
-  sectionTitleWithDate: {
-    color: '#FFFFFF',
+  majorHeaderContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 8,
+  },
+  majorHeaderTitle: {
+    fontSize: 17,
+    fontWeight: '600',
   },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 32,
-    backgroundColor: '#f5f5f5',
   },
   emptyTitle: {
     fontSize: 24,
     fontWeight: '600',
     marginTop: 16,
-    color: '#999',
   },
   emptySubtitle: {
     fontSize: 16,
-    color: '#999',
     textAlign: 'center',
     marginTop: 8,
   },

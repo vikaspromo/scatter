@@ -20,21 +20,20 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: true,
+        headerShown: false,
       }}>
       <Tabs.Screen
         name="inbox"
         options={{
-          title: 'Inbox',
-          headerShown: false,
-          tabBarIcon: ({ color }) => <TabBarIcon name="inbox" color={color} />,
+          title: 'Feed',
+          tabBarIcon: ({ color }) => <Ionicons name="newspaper" size={24} style={{ marginBottom: -3 }} color={color} />,
         }}
       />
       <Tabs.Screen
         name="reminders"
         options={{
-          title: 'Reminders',
-          tabBarIcon: ({ color }) => <TabBarIcon name="bell" color={color} />,
+          title: 'Bookmarks',
+          tabBarIcon: ({ color }) => <TabBarIcon name="bookmark-o" color={color} />,
         }}
       />
       <Tabs.Screen

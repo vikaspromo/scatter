@@ -1,5 +1,5 @@
 import { StyleSheet, ActivityIndicator, FlatList } from 'react-native';
-import { Text, View } from '@/components/Themed';
+import { Text, View, useThemeColor } from '@/components/Themed';
 import ActionableItemCard from '@/components/ActionableItemCard';
 import { fetchInboxItems, updateUserItemStatus } from '@/lib/supabase';
 import { getDeviceId } from '@/lib/deviceId';
@@ -14,6 +14,13 @@ export default function InboxScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deviceId, setDeviceId] = useState<string | null>(null);
+
+  // Theme colors
+  const background = useThemeColor({}, 'background');
+  const textSecondary = useThemeColor({}, 'textSecondary');
+  const tint = useThemeColor({}, 'tint');
+  const errorColor = useThemeColor({}, 'error');
+  const success = useThemeColor({}, 'success');
 
   useEffect(() => {
     getDeviceId().then(setDeviceId);
@@ -63,7 +70,8 @@ export default function InboxScreen() {
     }
   };
 
-  const handleRemind = async (itemId: string) => {
+  // For swipe gesture - removes card from list
+  const handleSwipeBookmark = async (itemId: string) => {
     if (!deviceId) return;
 
     // Optimistically remove from list
@@ -72,15 +80,25 @@ export default function InboxScreen() {
     try {
       await updateUserItemStatus(deviceId, itemId, 'remind');
     } catch (err) {
-      console.error('Failed to set reminder:', err);
-      // Could restore item here if needed
+      console.error('Failed to bookmark item:', err);
+    }
+  };
+
+  // For toggle button - keeps card in place
+  const handleBookmarkToggle = async (itemId: string, isBookmarked: boolean) => {
+    if (!deviceId) return;
+
+    try {
+      await updateUserItemStatus(deviceId, itemId, isBookmarked ? 'remind' : 'inbox');
+    } catch (err) {
+      console.error('Failed to toggle bookmark:', err);
     }
   };
 
   if (loading) {
     return (
-      <View style={styles.emptyContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={[styles.emptyContainer, { backgroundColor: background }]}>
+        <ActivityIndicator size="large" color={tint} />
         <Text style={styles.emptySubtitle}>Loading items...</Text>
       </View>
     );
@@ -88,20 +106,20 @@ export default function InboxScreen() {
 
   if (error) {
     return (
-      <View style={styles.emptyContainer}>
-        <FontAwesome name="exclamation-circle" size={64} color="#FF3B30" />
+      <View style={[styles.emptyContainer, { backgroundColor: background }]}>
+        <FontAwesome name="exclamation-circle" size={64} color={errorColor} />
         <Text style={styles.emptyTitle}>Error</Text>
-        <Text style={styles.emptySubtitle}>{error}</Text>
+        <Text style={[styles.emptySubtitle, { color: textSecondary }]}>{error}</Text>
       </View>
     );
   }
 
   if (items.length === 0) {
     return (
-      <View style={styles.emptyContainer}>
-        <FontAwesome name="check-circle" size={64} color="#4CAF50" />
+      <View style={[styles.emptyContainer, { backgroundColor: background }]}>
+        <FontAwesome name="check-circle" size={64} color={success} />
         <Text style={styles.emptyTitle}>All caught up!</Text>
-        <Text style={styles.emptySubtitle}>
+        <Text style={[styles.emptySubtitle, { color: textSecondary }]}>
           No new items to review. Check back later.
         </Text>
       </View>
@@ -109,7 +127,7 @@ export default function InboxScreen() {
   }
 
   return (
-    <GestureHandlerRootView style={styles.container}>
+    <GestureHandlerRootView style={[styles.container, { backgroundColor: background }]}>
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
@@ -117,7 +135,9 @@ export default function InboxScreen() {
           <ActionableItemCard
             item={item}
             onArchive={() => handleArchive(item.id)}
-            onRemind={() => handleRemind(item.id)}
+            onBookmarkToggle={(isBookmarked) => handleBookmarkToggle(item.id, isBookmarked)}
+            onSwipeBookmark={() => handleSwipeBookmark(item.id)}
+            initialBookmarked={false}
             showDateBadge={true}
           />
         )}
@@ -130,7 +150,6 @@ export default function InboxScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   listContent: {
     paddingVertical: 8,
@@ -140,7 +159,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 32,
-    backgroundColor: '#f5f5f5',
   },
   emptyTitle: {
     fontSize: 24,
@@ -149,7 +167,6 @@ const styles = StyleSheet.create({
   },
   emptySubtitle: {
     fontSize: 16,
-    color: '#666',
     textAlign: 'center',
     marginTop: 8,
   },
