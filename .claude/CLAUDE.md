@@ -1,4 +1,4 @@
-# Scatter - Claude Code Guidelines
+# Scatter - Project Guidelines
 
 ## Project Overview
 
@@ -86,10 +86,3 @@ To find an email by its `gmail_id` in the Gmail web UI:
 ```
 https://mail.google.com/mail/u/0/#inbox/{gmail_id}
 ```
-
-## Security Notes
-
-- Never commit `.env`, `credentials.json`, or `token.json`
-- Use anon key for SUPABASE_KEY (not service_role)
-- Mobile app only needs SUPABASE_URL and SUPABASE_KEY
-- ANTHROPIC_API_KEY stays server-side only
